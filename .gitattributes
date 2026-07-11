@@ -1,0 +1,8 @@
+*.hqx -text
+*.r filter=macroman -text
+
+*.c filter=mactext -text
+*.h filter=mactext -text
+*.cp filter=mactext -text
+*.cpp filter=mactext -text
+*.hpp filter=mactext -text
