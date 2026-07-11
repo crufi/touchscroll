@@ -44,10 +44,11 @@ release: $(RELEASE_ZIP)
 # entirely for projects that never included snow.mk, so `make release`
 # doesn't grow a hard djjr dependency for people who don't use Snow.
 #
-# guard-hda (from snow.mk, only defined when DEVICE_IMAGE is) listed
-# first so it runs before $(HFS_IMAGE) gets a chance to rebuild -- same
-# ordering reasoning as snow.mk's own targets.
-$(RELEASE_ZIP): $(if $(DEVICE_IMAGE),guard-hda) $(HFS_IMAGE) $(DEVICE_IMAGE)
+# $(DEVICE_IMAGE)'s own rule (in snow.mk) already lists $(HFS_IMAGE)
+# before guard-hda, so it doesn't need repeating here -- Make resolves
+# $(HFS_IMAGE) (rebuilding it first if needed) before getting to
+# $(DEVICE_IMAGE)'s prerequisites either way.
+$(RELEASE_ZIP): $(HFS_IMAGE) $(DEVICE_IMAGE)
 	@mkdir -p $(RELEASE_DIR)
 	rm -f $@ $(RELEASE_DIR)/$(RELEASE_NAME).img $(if $(DEVICE_IMAGE),$(RELEASE_DIR)/$(RELEASE_NAME).hda)
 	cp $(HFS_IMAGE) $(RELEASE_DIR)/$(RELEASE_NAME).img

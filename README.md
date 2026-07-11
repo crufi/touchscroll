@@ -193,9 +193,9 @@ Also rescues files that exist on the disk with no tracked counterpart at
 all -- created directly in the emulator, never added to git. These are
 pulled via MacBinary regardless of what they turn out to be, since
 there's no `.gitattributes` match to consult for something that's never
-been tracked. From there they're just ordinary new local files -- `git
-add` picks up `filter=mactext` if the extension matches, or `export.sh`'s
-own resource-fork detection sidecars it on the next commit if it's
+been tracked. `export.sh` (run automatically at the end, see below) then
+sorts out what each one actually is: `filter=mactext` if the extension
+matches, or its own resource-fork detection sidecars it if it's
 genuinely forked.
 
 That "new files" pass is recursive -- `hls`/`hcopy` have no built-in
@@ -218,9 +218,14 @@ silently pulling nothing, which is what happened before this check
 existed (`hls` prints its own "no such file or directory" but still
 exits 0, so a naive exit-status check doesn't catch it either).
 
-Doesn't run `export.sh` or `git add` itself -- it only updates the real
-files (new or already-tracked). `git status`/`git diff` afterward show
-exactly what came back from the emulator, same as any other local edit.
+Runs `export.sh` at the end, so tracked `.hqx`/`.r` sidecars immediately
+reflect whatever came back -- without this, the working tree has fresh
+content but `image.mk`'s `TRACKED_FILES` dependency (which watches the
+*sidecars*, not the real files) never changes, so `disk.img` never
+rebuilds and [`guard-overwrite.sh`](#guarding-against-overwriting-in-emulator-edits-guard-overwritesh)
+keeps warning even right after a successful pull. `git status`/`git
+diff` afterward show exactly what came back from the emulator, same as
+any other local edit.
 
 Wired into `snow.mk` as `make pull` -- see below.
 
