@@ -244,7 +244,6 @@ pascal void NSBScrollBarAction(ControlHandle c, short partCode);
 Boolean gWeAreScrolling;
 Boolean gDoSimpleScroll;
 Boolean gChangedCursor;
-Boolean gDontCheckPendingMouseEvent;
 ControlHandle gTheScrollBar;
 short gPartCode;  // the part code we are "trying" to send to FindControl and TrackControl
 
@@ -656,7 +655,7 @@ void PostClickFromPartCode(short partCode)
 	Rect cr = (**gTheScrollBar).contrlRect;
 	Rect r = (frontW)->portRect;
 	
-	if (cr.left >= r.left - 1 && cr.top - 1 >= r.top && cr.right <= r.right + 1 && cr.bottom <= r.bottom + 1)
+	if (cr.left >= r.left - 1 && cr.top >= r.top - 1 && cr.right <= r.right + 1 && cr.bottom <= r.bottom + 1)
 		r = cr;
 	else
 	{
@@ -830,7 +829,7 @@ void CallActionProc(ControlHandle c, ActionProc action, short partCode)
 			if (*thinkProjMgrTicks > TICKS && *thinkProjMgrTicks <= TICKS + 10)
 				*thinkProjMgrTicks = TICKS;
 		}		
-		else if (gThinkCVersion >= 0x07000)  // maybe it's Symantec C++ 7.0
+		else if (gThinkCVersion >= 0x0700)  // maybe it's Symantec C++ 7.0
 		{
 			long * const thinkProjMgrTicks = (long *) (((long) savedA5) - 0x59F0);
 
@@ -1250,6 +1249,12 @@ void DoInertialMode(ControlHandle c, ActionProc action, short inertialInterval)
 				// (it's OK for this to drop negative, will catch negative 
 				// inertialInterval at top of loop)
 				inertialVelocity -= inertialDecel * dtMillis;  
+
+				// TODO NEW:  if inertialVelocity just dropped to <= 0, FixDiv(1, <=0) gives
+				// a garbage inertialInterval; the doneScrolling check at the top of the
+				// loop catches it next time around, but meanwhile StartTimer below gets
+				// primed with the garbage value (negative --> microseconds!) and can
+				// squeeze in one extra too-fast scroll -- skip recompute when vel <= 0?
 				inertialInterval = (short) FixDiv(1, inertialVelocity);
 			}
 			
@@ -1321,7 +1326,12 @@ void DoInertialMode(ControlHandle c, ActionProc action, short inertialInterval)
 					SetInertialVelocityAndDecel(inertialInterval, &inertialVelocity, &inertialDecel);
 				}
 
-				// rubberband when inertial scroll hits the end				
+				// rubberband when inertial scroll hits the end
+				//
+				// TODO NEW:  inertialVelocity was already decremented by inertialDecel *
+				// dtMillis above (in the !turboKeyWasDown case), so subtracting it again
+				// here double-counts one deceleration step and the bounce starts slightly
+				// slower than the true current velocity
 				DoRubberBand(c, (inertialVelocity - inertialDecel * dtMillis) 
 								  * ABS(gScrollingDV),
 							 lastScrollMics);
@@ -1568,6 +1578,8 @@ void DoRubberBand(ControlHandle c, Fixed vel, unsigned long lastScrollMics)
 	SetPort((GrafPtr) frontW);
 	
 
+	// TODO NEW:  this block is dead code (nothing happens either way) -- looks like
+	// a leftover from before the IS_RECT_RGN() check above; delete it
 	{
 		const RgnHandle visRgn = ((GrafPtr) frontW)->visRgn;
 
@@ -1578,6 +1590,10 @@ void DoRubberBand(ControlHandle c, Fixed vel, unsigned long lastScrollMics)
 	}
 
 
+	// TODO NEW:  if SetUpOffscreen succeeds but LockPixels fails here, savedPixels
+	// stays false and the 'if (savedPixels)' cleanup below never runs, so the
+	// GWorld leaks permanently.  unlikely (the pixmap is nonpurgeable), but should
+	// call CleanUpOffscreen in that case
 	if (   SetUpOffscreen(&offscreen, &offRect, 0, TRY_TEMP_MEM)
 		&& LockPixels(GetGWorldPixMap(offscreen.g)))
 	{
@@ -1900,7 +1916,7 @@ doneRubberBand:
 
 pascal short PatchedTrackControl(ControlHandle c, Point p, ActionProc action)
 {
-	short result;
+	short result = 0;
 	Boolean didRubberBand = false;
 	Boolean itsTheScrollBar = false;
 
@@ -1989,10 +2005,15 @@ pascal short PatchedTrackControl(ControlHandle c, Point p, ActionProc action)
 		// maintain tiny FIFO queue of up to N recent mouse Y coords and times, used to
 		// determine recent final average drag speed for later inertial scrolling
 
-		const int kMaxMouseYs = 3;
+		enum { kMaxMouseYs = 3 };  // enum (not const int) so FIFO_BUF_SIZE is a valid array size below
 
-		FIFO *q_mouseY = FIFO_New(kMaxMouseYs);
-		FIFO *q_ticks  = FIFO_New(kMaxMouseYs);
+		// stack storage for the queues -- don't want NewPtr calls (which can fail and
+		// return NULL) inside a trap patch
+		char mouseYBuf[FIFO_BUF_SIZE(kMaxMouseYs)];
+		char ticksBuf [FIFO_BUF_SIZE(kMaxMouseYs)];
+
+		FIFO *q_mouseY = FIFO_New(kMaxMouseYs, mouseYBuf);
+		FIFO *q_ticks  = FIFO_New(kMaxMouseYs, ticksBuf);
 		
 		const short startMouseY = gLastMouse.v;  // save this before MouseChecker() updates it
 		short rowsScrolled = 0;	 // unsigned
@@ -2444,8 +2465,9 @@ void main(void)
 		Assert_THROWS(!ResError() && resAttrs & resSysHeap && resAttrs & resLocked, __LINE__);
 		
 		gGrabberCursorHndl = GetCursor(-4048);
+		Assert_THROWS(gGrabberCursorHndl != NULL, __LINE__);
 		resAttrs = GetResAttrs((Handle) gGrabberCursorHndl);   // sanity check
-		Assert_THROWS(!ResError() && gGrabberCursorHndl != NULL && resAttrs & resSysHeap, __LINE__);
+		Assert_THROWS(!ResError() && (resAttrs & resSysHeap), __LINE__);
 	
 		DetachResource(initHndl);  // we set Locked bit in "Set Project Type..." so don't need HLock
 		DetachResource((Handle) gGrabberCursorHndl);	

@@ -54,6 +54,11 @@ void GetCurResFileInfo(Str255 name, short *wdRefNum)
 // get filename and vRefNum for CurResFile(), use e.g. to save
 // info about INIT file itself at startup time for later resource
 // loading if needed
+//
+// note:  PBOpenWD reuses an existing working directory when vRefNum, dirID, and
+// procID all match (see IM: Files), so the nonzero signature procID below makes
+// repeated calls for the same directory return the same WD refnum rather than
+// leaking a new one each call
 {
 	FCBPBRec fcb_pb;
 	WDPBRec  wd_pb;
@@ -66,7 +71,7 @@ void GetCurResFileInfo(Str255 name, short *wdRefNum)
 	CheckFatal(
 		PBGetFCBInfo(&fcb_pb, false));
 	
-	wd_pb.ioWDProcID = 0;
+	wd_pb.ioWDProcID = 'Crut';  // nonzero signature --> WD gets reused (see note above)
 	wd_pb.ioNamePtr  = NULL;
 	wd_pb.ioWDDirID  = fcb_pb.ioFCBParID;
 	wd_pb.ioVRefNum  = fcb_pb.ioFCBVRefNum;
@@ -282,21 +287,53 @@ void DebugRect(const Rect * const r)
 //
 // (note this fully allocates space for max # entries, intended for small queues only)
 
-FIFO *FIFO_New(short maxItems)
+FIFO *FIFO_New(short maxItems, void *storage)
+// storage:  if non-NULL, must point to FIFO_BUF_SIZE(maxItems) bytes, which are
+//           used to hold the queue (and FIFO_Dispose then frees nothing) -- lets
+//           callers use e.g. stack storage inside a trap patch, where a failed
+//           NewPtr here would mean a NULL deref scribbling on low memory
+//
+// returns NULL if storage == NULL and NewPtr fails
 {
-	FIFO *q = (FIFO *) NewPtr(sizeof(FIFO));
-	
+	FIFO *q;
+
+	if (storage)
+	{
+		q = (FIFO *) (((long) storage + 1) & ~1L);  // 68000 requires even alignment
+		q->items = (long *) (q + 1);  // items live just past the struct itself
+		q->ownsStorage = false;
+	}
+	else
+	{
+		q = (FIFO *) NewPtr(sizeof(FIFO));
+		
+		if (!q)
+			return NULL;
+		
+		q->items = (long *) NewPtr(sizeof(long) * maxItems);
+		
+		if (!q->items)
+		{
+			DisposePtr((Ptr) q);
+			return NULL;
+		}
+		
+		q->ownsStorage = true;
+	}
+
 	q->numItems = 0;
 	q->maxItems = maxItems;
-	q->items = (long *) NewPtr(sizeof(long) * maxItems);
 
 	return q;
 }
 
 void FIFO_Dispose(FIFO *q)
 {
-	DisposePtr((Ptr) q->items);
-	DisposePtr((Ptr) q);
+	if (q->ownsStorage)
+	{
+		DisposePtr((Ptr) q->items);
+		DisposePtr((Ptr) q);
+	}
 }
 
 long FIFO_Newest(FIFO *q)
@@ -536,14 +573,18 @@ Boolean SetUpOffscreen(Offscreen *o, const Rect * const r, short depth, const lo
 			// try again without temp mem flag
 			newGWorldErr = NewGWorld(&o->g, depth, r, NULL, NULL, adjFlags);
 
+		TheZone = saveZone;
 		CheckMesgReturn(newGWorldErr, "probably out of memory", false);
 	}
 	else
+	{
 		// not trying to use temp mem -- just try NewGWorld normally
-		CheckMesgReturn(NewGWorld(&o->g, depth, r, NULL, NULL, adjFlags), 
-						"probably out of memory", false);
+		const OSErr newGWorldErr = NewGWorld(&o->g, depth, r, NULL, NULL, adjFlags);
+
+		TheZone = saveZone;
+		CheckMesgReturn(newGWorldErr, "probably out of memory", false);
+	}
 	
-	TheZone = saveZone;
 	o->inited = true;
 	
 	{
@@ -859,6 +900,10 @@ Offscreen *SavePixelsUnderWindow(WindowPtr w, long flags)
 
 void RestorePixelsUnderWindow(Offscreen *offscreen)
 {
+	// TODO NEW:  if LockPixels fails below (e.g. pixMap was purged), we correctly
+	// skip the restore but never CleanUpOffscreen/DisposePtr, so the GWorld and the
+	// Offscreen struct leak
+
 	if (offscreen  // (if NULL, something went wrong in setup, just use normal updating)
 		&& LockPixels(GetGWorldPixMap(offscreen->g)))  // (if failed, pixMap maybe purged, use normal updating)
 	{

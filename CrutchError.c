@@ -557,7 +557,7 @@ defaultHex:
 					case 't':  // OSType
 					{
 						const char * t;
-						INLINE_STRING(format, "%s\rat '%s' line %L"); 
+						INLINE_STRING(format, "'%c%c%c%c'");
 						arg = va_arg(args, long);
 						t = (char *) &arg;
 						Sprintf(format, pStr, t[0], t[1], t[2], t[3]);
@@ -606,8 +606,10 @@ void NumToHexString(long n, Str255 s, short nBytes)
 	
 	if (nBytes != 4 && nBytes != 2)
 	{
-		INLINE_PSTRING(s, "bad nBytes in NumToHexString()");
-		Complain(s);
+		INLINE_PSTRING(err, "bad nBytes in NumToHexString()");
+		Complain(err);
+		s[0] = 0;
+		return;
 	}
 	
 	s[0] = 1 + (nBytes << 1);

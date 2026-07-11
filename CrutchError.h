@@ -237,7 +237,7 @@ void SetA0(void *) = { NOP };  // A0 has been set to parameter already, we're do
 
 #ifndef __cplusplus
 #define Assert_THROWS(expr, n) \
-	do if (!expr) { _Error(0, "assertion failed: " #expr, __FILE__, __LINE__, false); throw(n); } while(0)
+	do if (!(expr)) { _Error(0, "assertion failed: " #expr, __FILE__, __LINE__, false); throw(n); } while(0)
 #endif
 
 #define AssertFatal(expr) \
@@ -248,7 +248,7 @@ void SetA0(void *) = { NOP };  // A0 has been set to parameter already, we're do
 
 #ifndef __cplusplus
 #define AssertMesg_THROWS(expr, s, n) \
-	do if (!expr) { _Error(0, s " (" #expr ")", __FILE__, __LINE__, false); throw(n); } while(0)
+	do if (!(expr)) { _Error(0, s " (" #expr ")", __FILE__, __LINE__, false); throw(n); } while(0)
 #endif
 
 #define AssertMesgFatal(expr, s) \
@@ -385,7 +385,7 @@ Handle _ConfirmResource(Handle rsrc, long flags, char *resStr, char *file, long 
 #define LEFT_KEY  0x7B	// Mac II and Extended Keyboard arrows
 #define RIGHT_KEY 0x7C
 #define UP_KEY	  0x7E
-#define DOWN_KinEY  0x7D
+#define DOWN_KEY	  0x7D
 #define OLD_LEFT  0x46	// Mac Plus and 1984 keypad arrows
 #define OLD_RIGHT 0x42
 #define OLD_UP 	  0x4D

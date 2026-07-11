@@ -23,7 +23,9 @@ extern "C" {
 
 // ========== Handy defines
 
+#ifndef offsetof
 #define offsetof(type, field)  ((size_t) &((type *) 0)->field)  // from stddef.h
+#endif
 
 #define ABS(x)    ((x) < 0 ? -(x) : (x))
 #define MIN(x, y) ((x) < (y) ? (x) : (y))
@@ -216,12 +218,17 @@ pascal OSErr SetDefaultOutputVolume(long level) =
 // ========== Mini FIFO fixed-length queue
 
 typedef struct FIFO {
+	Boolean ownsStorage;  // true --> FIFO_Dispose frees the queue's memory
 	short numItems;
 	short maxItems;	
 	long *items;	
 } FIFO;
 
-FIFO *FIFO_New(short maxItems);
+// bytes needed for caller-supplied FIFO_New storage; the extra byte lets FIFO_New
+// even-align an odd buffer pointer (the 68000 requires word alignment)
+#define FIFO_BUF_SIZE(maxItems) (sizeof(FIFO) + (maxItems) * sizeof(long) + 1)
+
+FIFO *FIFO_New(short maxItems, void *storage);  // storage:  NULL --> use NewPtr, else FIFO_BUF_SIZE(maxItems) bytes
 long FIFO_Oldest(FIFO *q);
 long FIFO_Newest(FIFO *q);
 void FIFO_Push(FIFO *q, long newItem);
