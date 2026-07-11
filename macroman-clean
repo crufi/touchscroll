@@ -1,0 +1,25 @@
+#!/bin/sh
+# Git "clean" filter (worktree -> blob) for Mac-Roman-embedding text that
+# is NOT itself vintage-authored CR-only text -- currently, mac-forks'
+# own DeRez-generated `.r` sidecars.
+#
+# Config (see install.sh):
+#   filter.macroman.clean = tools/mac-forks/macroman-clean
+#
+# DeRez always emits LF-terminated output on this machine, right now --
+# it's a modern tool's output, not a persisted vintage file, so there's
+# no CR convention to preserve. But its hex-dump comments embed raw
+# bytes straight from the resource fork, and for text-bearing resources
+# (STR#, vers, an owner-name resource, etc.) those bytes are genuine Mac
+# Roman prose -- e.g. a curly apostrophe that renders as "Ô" on GitHub
+# if left as a raw Mac Roman byte (see mactext-clean for the full
+# rationale on why that happens).
+#
+# So this is mactext's Mac-Roman<->UTF-8 half ONLY, deliberately with no
+# CR<->LF conversion: converting CR<->LF here would be actively wrong
+# and would break import.sh's `head -n 1` parsing of the sidecar's own
+# leading type/creator comment, which assumes LF. Verified empirically:
+# encoding-only round-trips this file byte-for-byte; adding LF->CR did
+# not (it turned the whole file into one line).
+export LC_ALL=C
+iconv -f MACINTOSH -t UTF-8

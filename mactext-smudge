@@ -1,0 +1,11 @@
+#!/bin/sh
+# Git "smudge" filter (blob -> worktree) for classic Mac OS text.
+#
+# Config (see install.sh):
+#   filter.mactext.smudge = tools/mac-forks/mactext-smudge
+#
+# Reverses mactext-clean, in the opposite order: LF -> CR, then UTF-8
+# -> Mac Roman. See mactext-clean for the full rationale, including
+# why LC_ALL=C is forced here.
+export LC_ALL=C
+tr '\n' '\r' | iconv -f UTF-8 -t MACINTOSH
