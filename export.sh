@@ -59,6 +59,21 @@ while IFS= read -r f; do
     has_ext_ci "$rel" hqx && continue
     has_ext_ci "$rel" r && continue
 
+    # Files already handled by git's own filter mechanism (mactext/
+    # macroman) are tracked directly, data fork only -- never sidecarred
+    # here, even if they happen to carry a non-empty resource fork. A
+    # real vintage .c/.h file often does (Finder window position, icon
+    # placement -- chrome, not code), and mactext's clean filter never
+    # reads/preserves resource-fork bytes at all (only a captured
+    # type/creator comment), so this genuinely is the intended fate for
+    # that content -- discarded, not silently BinHex'd wholesale instead.
+    # Confirmed: without this check, any such file lost the readable,
+    # diffable mactext treatment entirely.
+    attr=$(git check-attr filter -- "$rel" | awk -F': ' '{print $NF}')
+    case "$attr" in
+        mactext|macroman) continue ;;
+    esac
+
     rsize=$(rsrc_fork_size "$f")
     [ "$rsize" -gt 0 ] || continue
 
