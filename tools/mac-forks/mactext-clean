@@ -71,7 +71,18 @@ root=$(git rev-parse --show-toplevel)
 
 tmp=$(mktemp)
 trap 'rm -f "$tmp"' EXIT
-cat >"$tmp"
+# Converted to LF-delimited UTF-8 up front -- both the final output
+# format anyway, AND what the marker-detection below actually needs.
+# Doing this at the end instead (as this used to) meant `head -n 1`/
+# `tail -n "+2"` ran against the *raw* CR-only working-tree bytes, where
+# they don't work at all (they split on LF, and a genuine working-tree
+# mactext file has none) -- `head -n 1` silently returned the *entire*
+# file instead of just its first line, so the "does this already have a
+# marker" check always failed. Confirmed reproducible: with live
+# FinderInfo present (e.g. right after import.sh's restore_finderinfo),
+# that meant a fresh marker got prepended on top of the existing one
+# every time, duplicating it rather than replacing it.
+iconv -f MACINTOSH -t UTF-8 | tr '\r' '\n' >"$tmp"
 
 first_line=$(head -n 1 "$tmp")
 body_start=1
@@ -95,7 +106,5 @@ elif [ -n "$existing_marker" ]; then
     marker=$existing_marker
 fi
 
-{
-    [ -z "$marker" ] || printf '%s\n' "$marker"
-    tail -n "+$body_start" "$tmp"
-} | iconv -f MACINTOSH -t UTF-8 | tr '\r' '\n'
+[ -z "$marker" ] || printf '%s\n' "$marker"
+tail -n "+$body_start" "$tmp"
