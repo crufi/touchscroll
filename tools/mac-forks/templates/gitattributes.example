@@ -1,0 +1,25 @@
+# Installed by install.sh as a starting point -- edit the extension list
+# for your project, then leave this file alone (install.sh never
+# overwrites an existing .gitattributes).
+#
+# *.r gets macroman (encoding only -- these are mac-forks' own generated
+# sidecars, always LF-native, never CR); your actual vintage source gets
+# mactext (encoding *and* CR<->LF, since those files are genuinely
+# CR-authored). See tools/mac-forks/README.md's "Classic Mac text" and
+# "macroman" sections for why the two are different filters.
+*.hqx -text
+*.r filter=macroman -text
+
+*.c filter=mactext -text
+*.h filter=mactext -text
+*.cp filter=mactext -text
+*.cpp filter=mactext -text
+*.hpp filter=mactext -text
+
+# Add more filter=mactext -text lines for whatever else your project
+# has -- .p/.pas (Pascal), .a/.asm, etc.
+#
+# Naming collision to watch for: mac-forks generates .r sidecars for
+# resource-only files (Foo.rsrc -> Foo.rsrc.r). If your project also has
+# genuine hand-written Rez source ending in .r, rename those (.rez or
+# similar instead of .r) before using mac-forks.

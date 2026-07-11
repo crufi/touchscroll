@@ -88,4 +88,19 @@ force_resmudge macroman "converting to Mac Roman"
 echo "materializing real files from their .hqx/.r sidecars..."
 "$root/tools/mac-forks/import.sh"
 
+# .gitattributes/Makefile live in the project root, not tools/mac-forks/,
+# so they're outside what git subtree pull manages -- only ever created
+# here if genuinely missing, never overwritten. On a fresh project
+# that's true; on every later clone the file's already checked out by
+# git before install.sh even runs, so this is a no-op then, no separate
+# "first run" tracking needed.
+if [ ! -f "$root/.gitattributes" ]; then
+    cp "$root/tools/mac-forks/templates/gitattributes.example" "$root/.gitattributes"
+    echo "created .gitattributes from template -- edit it for your project's file types"
+fi
+if [ ! -f "$root/Makefile" ]; then
+    cp "$root/tools/mac-forks/templates/Makefile.example" "$root/Makefile"
+    echo "created Makefile from template -- edit SNOW_WORKSPACE/TEXT_CREATOR for your project"
+fi
+
 echo "done."

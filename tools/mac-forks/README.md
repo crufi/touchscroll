@@ -386,26 +386,40 @@ in the directory ready to go, committing those instead of an empty
 commit works exactly the same way -- either way, subtree just needs
 *some* commit to exist first.
 
-### 2. Pull in mac-forks
+### 2. Create the GitHub repo, pull in mac-forks
 
 ```sh
+gh repo create your-project-name --public --source=. --remote=origin   # or --private
 git remote add mac-forks https://github.com/crufi/mac-forks.git
+gh repo set-default origin
 git subtree add --prefix=tools/mac-forks mac-forks main --squash
 sh tools/mac-forks/install.sh
 ```
 
+`gh repo set-default origin` matters the moment a second remote exists —
+without it, `gh` can't always guess which one is the "real" GitHub repo,
+and commands like `gh release create` (see step 9) fail later with `No
+default remote repository has been set`. Setting it now, before it can
+bite, beats debugging it after the fact.
+
 `install.sh` checks for the required tools, symlinks the `pre-commit` /
-`post-checkout` / `post-merge` hooks, and configures the `mactext`/`macroman`
-filters. **Every clone needs to run this once** — hooks and filter config
-live in `.git/`, which `git clone` never populates.
+`post-checkout` / `post-merge` hooks, configures the `mactext`/`macroman`
+filters, and creates a starting `.gitattributes`/`Makefile` from
+`tools/mac-forks/templates/` if you don't already have them (see the next
+two steps for what to do with those). **Every clone needs to run this
+once** — hooks and filter config live in `.git/`, which `git clone` never
+populates.
 
-### 3. Add `.gitattributes`
+### 3. Edit `.gitattributes`
 
-Not shipped by mac-forks itself — every project's extensions differ, so this
-lives in your own repo, one pattern per line. `*.r` gets `macroman`
-(encoding only — these are mac-forks' own generated sidecars, always
-LF-native, never CR); your actual vintage source gets `mactext` (encoding
-*and* CR↔LF, since those files are genuinely CR-authored):
+The previous step already created one (from
+`tools/mac-forks/templates/gitattributes.example`) if you didn't have
+one — `install.sh` only ever creates it, never overwrites an existing
+one, so this is safe to re-run on later clones. Edit the extension list
+for your project. `*.r` gets `macroman` (encoding only — these are
+mac-forks' own generated sidecars, always LF-native, never CR); your
+actual vintage source gets `mactext` (encoding *and* CR↔LF, since those
+files are genuinely CR-authored). Defaults to:
 
 ```
 *.hqx -text
@@ -460,18 +474,23 @@ sh tools/mac-forks/install.sh
 
 ### 7. Push
 
-Wherever you like (GitHub, etc.) — nothing here is remote-specific.
+`origin` is already set from step 2:
+
+```sh
+git push -u origin main
+```
 
 ### 8. (Optional) Build + launch in an emulator
 
 Not part of getting git tracking working — a separate, optional layer for
-actually opening the project somewhere. If you use Snow, wire up both
-`snow.mk` (build + launch) and `release.mk` (package a release) in your
-project's own `Makefile`:
+actually opening the project somewhere. If you use Snow, step 2 already
+created a starting `Makefile` (from
+`tools/mac-forks/templates/Makefile.example`) if you didn't have one —
+edit `SNOW_WORKSPACE`/`TEXT_CREATOR` for your project. Defaults to:
 
 ```makefile
 SNOW_WORKSPACE ?= $(HOME)/Snow/your-workspace.snoww   # point this at your own workspace
-TEXT_CREATOR   := WHATEVER                             # your toolchain's creator code, e.g. KAHL for Symantec/THINK C
+TEXT_CREATOR   := KAHL                                 # or whatever your vintage toolchain expects
 
 include tools/mac-forks/snow.mk
 include tools/mac-forks/release.mk
@@ -498,10 +517,10 @@ gh release create v1.0.0 dist/*-v1.0.0.zip \
   --title "v1.0.0" --notes "..."
 ```
 
-If your project has more than one git remote (e.g. `origin` plus the
-`mac-forks` subtree remote you just added in step 2), `gh` can't always
-guess which one is the "real" GitHub repo, and `gh release create` fails
-with `No default remote repository has been set`. Fix once per clone with:
+If this fails with `No default remote repository has been set`, you
+likely skipped `gh repo set-default origin` back in step 2 — needed as
+soon as a second remote (`mac-forks`) exists, since `gh` can't always
+guess which one is the "real" GitHub repo otherwise. Fix it the same way:
 
 ```sh
 gh repo set-default owner/repo
