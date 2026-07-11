@@ -1,0 +1,10 @@
+# Installed by install.sh as a starting point -- edit SNOW_WORKSPACE and
+# TEXT_CREATOR for your project, then leave this file alone (install.sh
+# never overwrites an existing Makefile). See tools/mac-forks/README.md
+# for what snow.mk/release.mk each give you.
+
+SNOW_WORKSPACE ?= $(HOME)/Snow/your-workspace.snoww   # point this at your own workspace
+TEXT_CREATOR   := KAHL                                 # or whatever your vintage toolchain expects
+
+include tools/mac-forks/snow.mk
+include tools/mac-forks/release.mk
