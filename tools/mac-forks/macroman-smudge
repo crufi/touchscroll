@@ -1,0 +1,11 @@
+#!/bin/sh
+# Git "smudge" filter (blob -> worktree), reverses macroman-clean.
+#
+# Config (see install.sh):
+#   filter.macroman.smudge = tools/mac-forks/macroman-smudge
+#
+# See macroman-clean for the full rationale, including why LC_ALL=C is
+# forced and why this deliberately does NOT touch line endings the way
+# mactext-smudge does.
+export LC_ALL=C
+iconv -f UTF-8 -t MACINTOSH

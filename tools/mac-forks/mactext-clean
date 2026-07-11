@@ -1,0 +1,101 @@
+#!/bin/sh
+# Git "clean" filter (worktree -> blob) for classic Mac OS text.
+#
+# Config (see install.sh):
+#   filter.mactext.clean = tools/mac-forks/mactext-clean %f
+#
+# Classic Mac OS text has two properties that trip up modern git
+# tooling:
+#
+#   1. Lines are separated by a bare CR (0x0D), no LF at all. Git's own
+#      line-ending machinery (core.autocrlf, text=auto, eol=...) only
+#      knows LF and CRLF, so it can't help -- and neither GitHub's web
+#      viewer nor a normal git diff treats a lone CR as a line break;
+#      the file just renders as one giant line.
+#
+#   2. It's encoded as Mac OS Roman, not UTF-8 -- so anything above
+#      ASCII (curly quotes, em dashes, accented letters, (c)) is a
+#      *different character* if read back as UTF-8 or Latin-1. E.g.
+#      byte 0xD4 is a left curly quote in Mac Roman but renders as "Ô"
+#      if a modern tool (GitHub included) reads it as Latin-1/UTF-8.
+#
+# Fixing only the line endings while leaving Mac Roman bytes in place
+# doesn't actually solve the GitHub-rendering problem -- so both are
+# converted together here. Git only allows one `filter=` per path, so
+# this has to be a single combined filter rather than two independent
+# ones.
+#
+# Also captures the file's Finder type/creator, if it currently has
+# any, as a human-readable leading comment -- same idea as machex/
+# macderez's leading comment on .r sidecars. Unlike those, this DOES
+# need %f: the metadata lives on the real file (%f), not in the stdin
+# content git pipes in. Where that metadata originally comes from: the
+# very first time one of these files is checked in, it's expected to
+# have been pulled off a real vintage volume (e.g. via hcopy), which is
+# when it'd actually have a meaningful type/creator to capture -- a
+# file that started life as plain modern text never has one, and gets
+# no comment at all.
+#
+# If the file has no live Finder info right now (common on later
+# commits -- most editors don't preserve xattrs) but the incoming
+# content already starts with a comment in this format, that prior
+# value is carried forward unchanged rather than silently dropped.
+#
+# Restoring this on checkout is NOT done here or in mactext-smudge --
+# see import.sh for why (same race that machex-smudge hit trying to
+# write directly to a tracked path).
+#
+# No forks or races to worry about for the CONTENT itself (unlike
+# machex/macderez) -- it's a plain stdin/stdout transform, %f is only
+# used as a side-channel to read the file's current Finder info.
+#
+# LC_ALL=C for the tr step: these files are full of high-bit bytes,
+# and `tr` under a UTF-8 locale treats those as invalid multi-byte
+# sequences and errors with "Illegal byte sequence." iconv is told its
+# encodings explicitly and doesn't need this, but it's harmless to set
+# for the whole pipeline.
+#
+# No need to reset it afterward: git runs this as its own fresh
+# process per file, so the export dies with this process and never
+# reaches git or the next file's filter invocation. (Only matters if
+# you `source` this script into an interactive shell instead of
+# executing it -- then it WOULD stick around, since sourcing shares
+# environment with the caller.)
+set -eu
+export LC_ALL=C
+
+path=$1
+root=$(git rev-parse --show-toplevel)
+# shellcheck source=lib.sh
+. "$root/tools/mac-forks/lib.sh"
+
+tmp=$(mktemp)
+trap 'rm -f "$tmp"' EXIT
+cat >"$tmp"
+
+first_line=$(head -n 1 "$tmp")
+body_start=1
+existing_marker=
+case "$first_line" in
+    "/* auto-generated (do not modify): "*" hex="*" */")
+        body_start=2
+        existing_marker=$first_line
+        ;;
+esac
+
+hex_spaced=$(xattr -px com.apple.FinderInfo "$path" 2>/dev/null || true)
+hex=$(printf '%s' "$hex_spaced" | tr -d ' \n')
+
+marker=
+if [ -n "$hex" ]; then
+    type=$(finderinfo_field "$hex_spaced" 0)
+    creator=$(finderinfo_field "$hex_spaced" 4)
+    marker="/* auto-generated (do not modify): type=$type creator=$creator hex=$hex */"
+elif [ -n "$existing_marker" ]; then
+    marker=$existing_marker
+fi
+
+{
+    [ -z "$marker" ] || printf '%s\n' "$marker"
+    tail -n "+$body_start" "$tmp"
+} | iconv -f MACINTOSH -t UTF-8 | tr '\r' '\n'
