@@ -45,12 +45,8 @@ WORKSPACE := $(SNOW_PATH)/$(notdir $(CURDIR)).snoww
 # Builds both images, not just disk.img -- disk.hda is what Snow (and a
 # release, see release.mk) actually needs, so a plain `make`/`make all`
 # should leave it in a working, current state too, not just the
-# intermediate. guard-hda listed first (and ahead of $(DEVICE_IMAGE) in
-# every target below) so it always runs *before* $(HFS_IMAGE) gets a
-# chance to rebuild -- guard-overwrite.sh needs to compare disk.hda
-# against the disk.img it was actually converted from, not one that
-# just got rebuilt moments before the check ran.
-all: guard-hda $(DEVICE_IMAGE)
+# intermediate.
+all: $(DEVICE_IMAGE)
 
 # guard-overwrite.sh runs before djjr overwrites disk.hda -- if the disk
 # looks like it has edits nothing's pulled back yet (see pull-from-disk.sh
@@ -58,31 +54,41 @@ all: guard-hda $(DEVICE_IMAGE)
 # them. FORCE=1 skips it (needed for non-interactive use, since the
 # confirmation prompt reads from stdin).
 #
-# guard-hda is its OWN phony target, never a recipe line folded into
-# $(DEVICE_IMAGE)'s own rule, for two reasons: (1) Make treats disk.hda
-# as up to date whenever it's newer than disk.img, which is exactly what
-# happens after an in-emulator edit (confirmed: "Nothing to be done for
-# `all'", guard never even ran) -- a phony prerequisite has no mtime of
-# its own, so listing it as a prerequisite of $(DEVICE_IMAGE) always
-# forces that rule's recipe (the djjr conversion) to run too, regardless
-# of whether disk.hda already looks newer than disk.img. (2) it
-# deliberately does NOT depend on $(HFS_IMAGE) itself, so it never
-# triggers disk.img's own rebuild (which runs import.sh, touching local
-# files) before the check runs.
+# guard-hda is its own phony target, never a recipe line folded into
+# $(DEVICE_IMAGE)'s own rule -- Make treats disk.hda as up to date
+# whenever it's newer than disk.img, which is exactly what happens after
+# an in-emulator edit (confirmed: "Nothing to be done for `all'", guard
+# never even ran). A phony prerequisite has no mtime of its own, so
+# listing it as a prerequisite of $(DEVICE_IMAGE) always forces that
+# rule's recipe (the djjr conversion) to run too, regardless of whether
+# disk.hda already looks newer than disk.img.
 #
-# It's listed as a prerequisite in TWO places on purpose: first in `all`/
-# $(WORKSPACE) (below), so its recipe -- the actual check -- runs before
-# $(HFS_IMAGE) gets touched; and again here, on $(DEVICE_IMAGE) itself,
-# purely for the forcing effect above (Make won't re-run an
-# already-satisfied phony target's recipe twice in one invocation, but
-# still treats the target that depends on it as needing a rebuild).
+# Listed AFTER $(HFS_IMAGE) below on purpose, so $(HFS_IMAGE)'s own
+# rebuild (if it needs one) happens first and the check sees the
+# freshest possible disk.img -- confirmed this matters: `make pull`
+# rescues content into the working tree and regenerates tracked
+# sidecars (via export.sh), which is exactly what should make disk.img
+# stale and trigger a rebuild here, but with guard-hda listed *before*
+# $(HFS_IMAGE) the check ran against the old, pre-rebuild disk.img and
+# kept warning even immediately after a successful pull.
 guard-hda:
 	FORCE=$(FORCE) sh tools/mac-forks/guard-overwrite.sh $(DEVICE_IMAGE) $(HFS_IMAGE)
 
 $(DEVICE_IMAGE): $(HFS_IMAGE) guard-hda
 	djjr convert to-device $(HFS_IMAGE) $@
+	touch -r $(HFS_IMAGE) $@
+	# ^ djjr's own conversion always reruns now (forced above), even when
+	# disk.img didn't actually change -- without pinning disk.hda's mtime
+	# back to disk.img's, it drifts to "now" on every single invocation,
+	# and guard-overwrite.sh's whole-image check (disk.hda vs disk.img)
+	# would eventually exceed its tolerance purely from wall-clock time
+	# passing between ordinary, no-op `make` runs, nothing actually
+	# wrong. Pinning them together after every conversion means the only
+	# way they drift apart is something else (the emulator) touching
+	# disk.hda in between -- confirmed this was a real, reproducible
+	# false positive without it.
 
-$(WORKSPACE): guard-hda $(DEVICE_IMAGE) tools/mac-forks/snow-attach-disk.py
+$(WORKSPACE): $(DEVICE_IMAGE) tools/mac-forks/snow-attach-disk.py
 	python3 tools/mac-forks/snow-attach-disk.py $(SNOW_WORKSPACE) $(DEVICE_IMAGE) $@
 
 run: $(WORKSPACE)

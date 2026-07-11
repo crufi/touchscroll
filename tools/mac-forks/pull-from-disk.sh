@@ -24,17 +24,20 @@
 # at all -- created directly in the emulator, never added to git. Pulled
 # via MacBinary regardless of what they turn out to be (there's no
 # tracked .gitattributes match to consult yet for something never
-# tracked), which faithfully preserves whatever's actually there; from
-# that point on it's an ordinary new local file, same as one you'd
-# created by hand -- `git add` picks up .gitattributes' filter=mactext if
-# the extension matches, or export.sh's own resource-fork detection
-# sidecars it on the next commit if it's genuinely forked.
+# tracked), which faithfully preserves whatever's actually there.
 #
-# Does NOT run export.sh or `git add` -- it only updates the real,
-# gitignored/working-tree files. The pre-commit hook already syncs
-# sidecars from real files normally; after running this, `git status`/
-# `git diff` show exactly what came back from the emulator, same as any
-# other local edit.
+# Runs export.sh at the end, so tracked .hqx/.r sidecars immediately
+# reflect whatever came back -- confirmed this matters: without it, the
+# working tree has fresh content but the *tracked* sidecars (what
+# image.mk's TRACKED_FILES dependency actually watches) don't change,
+# so Make doesn't see disk.img as needing a rebuild, disk.img's mtime
+# stays stale, and guard-overwrite.sh -- which compares disk.hda against
+# disk.img, not local files -- keeps reporting the same "may hold
+# changes" warning even immediately after a successful pull. Does NOT
+# run `git add`/commit beyond what export.sh itself stages (new
+# real-file sidecars, .gitignore) -- `git status`/`git diff` afterward
+# show exactly what came back from the emulator, same as any other
+# local edit.
 #
 # Requires hfsutils (hmount/humount/hcopy/hls) and macbinary -- same as
 # build-floppy.sh.
@@ -222,4 +225,9 @@ else
 fi
 
 humount
+
+# Regenerate tracked sidecars from whatever just landed -- see the
+# comment at the top of this file for why this can't be skipped.
+"$root/tools/mac-forks/export.sh"
+
 echo "done pulling from $disk"
