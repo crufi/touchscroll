@@ -1,7 +1,11 @@
 /* auto-generated (do not modify): type=TEXT creator=KAHL hex=544558544B41484C000000000000000000000000000000000000000000000000 */
 //==================================================================================
-// CrutchError.c
+// TinyCrutchError.c
 // ©2023 Steve Crutchfield
+//
+// A STRIPPED COPY of CrutchError.c for the TouchScroll INIT project:  only
+// functions TouchScroll reaches (directly or transitively) are kept -- see note
+// in TinyCrutchUtilities.c.  Don't fix a bug here without fixing CrutchError.c!
 //
 // Low-level error handling routines to pop up a dialog box, do string wrangling
 // with Sprintf(), etc.  Separated here because the error handling routines (Assert
@@ -35,7 +39,6 @@
 
 #include <Processes.h>
 #include <Traps.h>
-#include <GestaltEqu.h>
 
 #include "CrutchError.h"
 
@@ -168,39 +171,6 @@ void _Notify(ConstStr255Param s, NMRec *nmRec, Str255 staticStringPtr)
 		SysError(1002);  // should never fail
 }
 
-// ========== _ConfirmResource
-
-Handle _ConfirmResource(Handle rsrc, long flags, char *resStr, char *file, long line)
-// last 3 params are #rsrc and __FILE__ as C strings from the preprocessor, and __LINE__
-{
-	short err = noErr;
-	const Boolean badRes = (err = ResError()) || !rsrc || !*rsrc;
-	Boolean badFlags = false;
-
-	if (!badRes && flags)
-	{
-		// confirm resource attributes (resLocked, resSysHeap, etc.) are as expected
-		const short resAttrs = GetResAttrs(rsrc);
-		badFlags = ResError() || (resAttrs & flags) != flags;
-	}
-		
-	if (badRes || badFlags)
-	{
-		if (badRes)
-			ComplainSprintf(
-				"Couldn't load a resource (error %D) at %s in %s line %L",
-				err, resStr, file, line);
-		else
-			ComplainSprintf(
-				"Found wrong resource flags at %s in %s line %L", 
-				resStr, file, line);
-
-		return NULL;
-	}
-	else
-		return rsrc;
-}
-
 // ========== Dialog box utilities
 
 static void _PopUpDialogOnTheFly(ConstStr255Param mesgStr, short iconID, Boolean beep)
@@ -292,10 +262,12 @@ static void _MessageBox(ConstStr255Param s, short iconID, Boolean beep)
 		Notify(s);
 }
 
+#ifdef DEBUG  // in this project only Debug() reaches MessageBox/MessageBoxSprintf
 void MessageBox(ConstStr255Param s)
 {
 	_MessageBox(s, noteIcon, false);
 }
+#endif
 
 	static pascal void _FrameDefaultButton(DialogPtr dlog, short userItemNumber)
 // gets default item number from DialogRecord (usually 1)
@@ -410,13 +382,6 @@ void _Error(long errCode, const char *errStr, const char *file, long line, Boole
 #endif
 }
 
-void ComplainInliningIsOff(void)
-// used to complain if we can't SetUpA4 from C++ -- must do from C so we can have an inline string
-{
-	INLINE_PSTRING(s, "recompile with “use function calls for inlines” off");
-	Complain(s);
-}
-
 // ========== Sprintf and related functions
 
 // define various functions that apply Sprintf to args and pass to another function 'func':
@@ -434,8 +399,9 @@ void ComplainInliningIsOff(void)
 		FUNC(f);							\
 	}
 
+#ifdef DEBUG  // in this project only Debug() reaches MessageBox/MessageBoxSprintf
 DEFINE_SPRINTF_FUNC(MessageBox)  // defines MessageBoxSprintf()
-DEFINE_SPRINTF_FUNC(Complain)	 // defines ComplainSprintf()
+#endif
 
 unsigned char *Sprintf(const char *s, Str255 f, ...)
 {
@@ -737,31 +703,7 @@ Boolean EqualStr(register ConstStr255Param s1, register ConstStr255Param s2)
 	return true;
 }
 
-void CToPStr(const register char * const c, register Str255 p)
-// given a C string in 'c', converts it to a Pascal string in 'p'
-// TODO redo in minimal asm for fun
-{
-	register short i;
-	
-	for (i = 0; c[i]; i++)
-		p[i + 1] = c[i];
-	
-	p[0] = i;
-}
-
 // ========== Environment utilities
-
-long SystemVersion(void)
-// e.g. 0x00000755 == 7.5.5
-// requires A4/A5 setup because Gestalt calls to THINK glue
-{
-	long result;
-	
-	if (Gestalt(gestaltSystemVersion, &result) == noErr)
-		return result;
-	else
-		return 0L;
-}
 
 Boolean TrapAvailable(short trap)
 // per IM:OS Utilities p. 8-22
@@ -811,40 +753,3 @@ Boolean CurrentProcessIsFrontProcess(void)
 			 && sameProcess);
 }
 
-Boolean WeAreAMultiSegmentCodeResource(void)
-{
-#if __option(a4_globals) && !__option(pcrel_strings)
-	// we are a code resource (a4_globals) 
-	// but NOT a single-segment code resource (pcrel_strings)
-	return true;
-#else
-	return false;
-#endif
-}
-
-Handle GetHandleToThisMultiSegmentCodeResource(void)
-// are we running in a multi-segment code resource?  if so, return a handle to it
-// it, maybe for the caller to lock?
-//
-// tested, but not currently using anywhere -- but might be handy in Exposé cdev
-//
-//***TODO isn't this WRONG?  won't A4 always point to the MAIN segment, not 'this'
-// segment?
-{
-	if (WeAreAMultiSegmentCodeResource())
-	{
-		register Ptr a4_reg;
-		Handle codeHndl;
-		
-		asm { move.l a4, a4_reg }
-		
-		LoadResource(codeHndl = RecoverHandle(a4_reg));
-	
-		// LoadResource() was just to confirm we actually got a good handle to
-		// a code resource:
-		if (ResError() == noErr)
-			return codeHndl;
-	}
-	
-	return NULL;
-}

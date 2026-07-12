@@ -1,22 +1,20 @@
 /* auto-generated (do not modify): type=TEXT creator=KAHL hex=544558544B41484C000000000000000000000000000000000000000000000000 */
 //==================================================================================
-// CrutchUtilities.c
+// TinyCrutchUtilities.c
 // ©2024 Steve Crutchfield
 //
-// A handy library of utilities for INITs, patches, and applications.
-// Depends on the lower-level routines in CrutchError.c.
+// A STRIPPED COPY of CrutchUtilities.c for the TouchScroll INIT project:  only
+// functions TouchScroll reaches (directly or transitively) are kept, because the
+// THINK/Symantec 'Smart Link' option doesn't reliably strip dead code.  If you
+// need something that isn't here, copy it back in from CrutchUtilities.c -- and
+// don't fix a bug here without also fixing it in CrutchUtilities.c!
 //
-// I include this file and CrutchError.c directly in projects.  Precompiling a 
-// library prevents THINK C's Smart Link option from working (though it doesn't seem
-// to do much anyway...) and also prevents this code from seeing project-level
-// settings like the APP_NAME #define.
+// Depends on the lower-level routines in TinyCrutchError.c.
 //==================================================================================
 
 #include <stdarg.h>
 #include <QDOffscreen.h>
 #include <Traps.h>
-#include <Sound.h>
-#include <Files.h>
 #include <GestaltEqu.h>
 
 #include "CrutchUtilities.h"
@@ -25,149 +23,7 @@
 
 
 
-// ========== QuickDraw utilities
-
-short GetFontHeight(void)
-{
-	FontInfo f;
-	GetFontInfo(&f);
-	return f.ascent + f.descent + f.leading;
-}
-
-short EllipsifyString(const short leftEdge, const short rightEdge, Str255 s)
-// shortens 's' with an ellipsis if needed such that, when drawn from 'leftEdge'
-// in the current font/size, it will not extend past 'rightEdge'
-//
-// returns width of the resulting string
-{
-	short w;
-	
-	while (leftEdge + (w = StringWidth(s)) > rightEdge && s[0] > 2)
-		s[--s[0]] = '…';  // truncate final 2 chars, add ellipsis
-	
-	return w;
-}
-
-// ========== Resource utilities
-
-void GetCurResFileInfo(Str255 name, short *wdRefNum)
-// get filename and vRefNum for CurResFile(), use e.g. to save
-// info about INIT file itself at startup time for later resource
-// loading if needed
-//
-// note:  PBOpenWD reuses an existing working directory when vRefNum, dirID, and
-// procID all match (see IM: Files), so the nonzero signature procID below makes
-// repeated calls for the same directory return the same WD refnum rather than
-// leaking a new one each call
-{
-	FCBPBRec fcb_pb;
-	WDPBRec  wd_pb;
-
-	fcb_pb.ioRefNum  = CurResFile();
-	fcb_pb.ioNamePtr = name;
-	fcb_pb.ioFCBIndx = 0;
-	fcb_pb.ioVRefNum = 0;
-
-	CheckFatal(
-		PBGetFCBInfo(&fcb_pb, false));
-	
-	wd_pb.ioWDProcID = 'Crut';  // nonzero signature --> WD gets reused (see note above)
-	wd_pb.ioNamePtr  = NULL;
-	wd_pb.ioWDDirID  = fcb_pb.ioFCBParID;
-	wd_pb.ioVRefNum  = fcb_pb.ioFCBVRefNum;
-
-	CheckFatal(
-		PBOpenWD(&wd_pb, false));
-	
-	*wdRefNum = wd_pb.ioVRefNum;
-}
-
-Handle GetResourceInSysHeap(OSType type, short id)
-{
-	const THz saveZone = TheZone;
-	Handle h;	
-
-	TheZone = SysZone;
-	h = GetResource(type, id);
-	TheZone = saveZone;
-
-	return h;
-}
-
-Boolean ReloadINITResource(Handle *h, OSType type, short id, Str31 fName, short wdRefNum)
-// check to see if a resource from our INIT file was purged (or never loaded); 
-// if yes, reopen INIT resource fork and reload, confirming it goes into sysHeap,
-// then detach.
-// (can't just use LoadResource when later running INIT code, since our resource
-// file was closed at startup time.)
-//
-// return true if successful.
-{
-	if (!*h || !**h)  // was resource never loaded, or purged?  (if not, do nothing)
-	{
-		short saveVol, rfRefNum;
-		
-		if (Check(GetVol(NULL, &saveVol)))
-		{
-			if (*h)
-				DisposeHandle(*h);  // clean up old purged handle (not a resource anymore)
-
-			*h = NULL;
-				
-			SetVol(NULL, wdRefNum);
-		
-			if (Assert((rfRefNum = OpenResFile(fName)) != -1))
-			{
-				if (ConfirmResourceWithFlags(*h = Get1Resource(type, id), resSysHeap))
-					DetachResource(*h);
-					
-				CloseResFile(rfRefNum);
-			}
-			
-			SetVol(NULL, saveVol);
-		}
-	}
-	
-	return *h && **h;
-}
-
 // ============ Environment information utilities
-
-Boolean FindProcess(OSType type, OSType creator, ProcessSerialNumber *psn)
-// find PSN for given creator/type, return false if not found
-{
-	psn->highLongOfPSN = kNoProcess;
-	psn->lowLongOfPSN  = kNoProcess;
-
-	while (noErr == GetNextProcess(psn))
-	{
-		ProcessInfoRec pInfo;
-		Str31 pName;
-		
-		pInfo.processInfoLength = sizeof(ProcessInfoRec);
-		pInfo.processName       = pName;
-		pInfo.processAppSpec    = NULL;
-
-		if (noErr == GetProcessInformation(psn, &pInfo)
-			&& pInfo.processSignature == creator
-			&& pInfo.processType      == type)
-		{
-			return true;
-		}
-	}
-	
-	return false;
-}
-
-Boolean FrontProcessIs(ProcessSerialNumber psn)
-{
-	ProcessSerialNumber frontPsn;
-	Boolean same;
-		
-	return noErr == GetFrontProcess(&frontPsn) 
-		&& noErr == SameProcess(&frontPsn, &psn, &same)
-		&& same;
-}
 
 void GetAppInfo(ProcessSerialNumber psn, OSType *type, OSType *creator)
 // get app's type and creator code from PSN
@@ -259,30 +115,6 @@ bool CallShowInitIconXedOut(short code_id, short icon_id, short x_id) {
 	return true;
 }
 
-// ========== Sound utilities
-
-short SoundManagerVersion(void)
-// note:  Sound Manager 3.0 comes with System 7.1 (built-in), or 7.0 w/ QuickTime;
-// great article by its author Jim Reekes here:
-// http://preserve.mactech.com/articles/develop/issue_16/034-038_QuickTime_column.html
-{
-	if (TrapAvailable(_SoundDispatch))
-		return SndSoundManagerVersion().majorRev;
-	else
-		return 0;
-}
-
-// ========== Debug utilities
-
-#ifdef DEBUG
-
-void DebugRect(const Rect * const r)
-{
-	Debug("%r", *r);
-}
-
-#endif
-
 // ========== FIFO - a mini FIFO queue of longs; could of course be ptrs to structs too
 //
 // (note this fully allocates space for max # entries, intended for small queues only)
@@ -367,21 +199,6 @@ void FIFO_Push(FIFO *q, long newItem)
 
 // ========== LocalToGlobal- and GlobalToLocal-related routines
 
-/*
-Point GetGlobalCoordOffset(GrafPtr g)
-{
-
-	if (g->portBits.rowBytes & 0xC000)
-		// not OK at interrupt time, handle might be unlocked 
-		return topLeft((**((CGrafPtr) g)->portPixMap).bounds);
-	else
-		return topLeft(g->portBits.bounds);		
-
-		
-	return topLeft(GET_GRAFPORT_BITORPIXMAP(g).bounds);
-}
-*/
-
 void GlobalToLocalForPort(GrafPtr g, Point *p)
 // allows a quick GlobalToLocal without changing port
 {
@@ -389,23 +206,6 @@ void GlobalToLocalForPort(GrafPtr g, Point *p)
 		
 	p->h += offset.h;
 	p->v += offset.v;
-}
-
-void LocalToGlobalForPort(GrafPtr g, Point *p)
-// allows a quick LocalToGlobal without changing port
-{
-	Point offset = GET_GLOBAL_COORD_OFFSET(g);
-		
-	p->h -= offset.h;
-	p->v -= offset.v;
-}
-
-void LocalToGlobalRect(Rect *r, Point offset)
-{
-	r->left   -= offset.h;
-	r->top    -= offset.v;
-	r->right  -= offset.h;
-	r->bottom -= offset.v; 
 }
 
 void GlobalToLocalRectForPort(GrafPtr g, Rect *r)
@@ -428,63 +228,7 @@ void LocalToGlobalRectForPort(GrafPtr g, Rect *r)
 	r->bottom -= offset.v;
 }
 
-void GlobalToLocalRect(Rect *r, Point offset)
-{
-	r->left   += offset.h;
-	r->top    += offset.v;
-	r->right  += offset.h;
-	r->bottom += offset.v; 
-}
-
-Rect GetGlobalWindowPortRect(WindowPtr w)
-// return a window's portRect in global coords
-{
-	Rect r = w->portRect;
-	LocalToGlobalRectForPort(w, &r);
-	return r;
-}
-
-Rect GetGlobalWindowStrucRect(WindowPtr w)
-// return the rect encluding a window's strucRgn, in global coords --
-// note this may temporarily show/hide the window offscreen, invoking calls to its WDEF
-{
-	// get global coords of w's topleft corner
-	
-	Point corner = topLeft(w->portRect);
-	Rect r;
-	
-	LocalToGlobalForPort(w, &corner);
-
-	if (((WindowPeek) w)->visible)
-		r = (**(((WindowPeek) w)->strucRgn)).rgnBBox;
-	else
-	{
-		// get w's global structure rect while still hidden by moving it way offscreen
-		// and temporarily showing it
-		// per Scott Knaster, Macintosh Programming Secrets, p. 329		
-		const short kOffscreenShift = 0x4000;
-		MoveWindow(w, corner.h, corner.v + kOffscreenShift, false);
-		ShowHide(w, true);
-		r = (**(((WindowPeek) w)->strucRgn)).rgnBBox;
-		ShowHide(w, false);
-		MoveWindow(w, corner.h, corner.v, false);
-		
-		r.top    -= kOffscreenShift;
-		r.bottom -= kOffscreenShift;
-	}
-		
-	return r;
-}
-
 // ========== Timer routines
-
-/*
-static void TimerDone(void)
-{  // NOT NEEDED - see RUNNING(t) macro
-	// (requires System 6.0.3 (?) to get TMTask address in A1)
-	asm { sf Timer.running(a1) }  // t->running = false
-}
-*/
 
 void SetUpTimer(Timer *t)
 {
@@ -729,297 +473,3 @@ void RestorePixelsWithOffset(const Offscreen * const o, const Rect * const r, co
 	if (!alreadyLocked) UnlockPixels(GetGWorldPixMap(o->g));
 }
 
-void BlitOffscreenWithOffset(const Offscreen * const oFrom, Offscreen * const oTo, 
-	const Rect * const r, const short dh, const short dv)
-// no need to call LockPixels, we do it and restore locked/unlocked state when done
-// for both bitmaps
-// 'r' is source rect; offsets dh, dv apply to destination rect only
-// Rect is in GLOBAL coords
-{
-	const BitMap *from = (BitMap *) *GetGWorldPixMap(oFrom->g);
-	const BitMap *to   = (BitMap *) *GetGWorldPixMap(oTo->g);
-
-	const Boolean alreadyLockedFrom = GWORLDPIXELS_LOCKED(oFrom->g);
-	const Boolean alreadyLockedTo   = GWORLDPIXELS_LOCKED(oTo->g);
-
-	if (!alreadyLockedFrom) AssertFatal(LockPixels(GetGWorldPixMap(oFrom->g)));  // should never fail
-	if (!alreadyLockedTo)   AssertFatal(LockPixels(GetGWorldPixMap(oTo->g)));	 // for nonpurgeable pmap
-	
-	// set to offscreen GWorld -- we don't really need this for CopyBits, except 
-	// that if current port has weird fore/backcolor it would colorize the image 
-	// (we set ours to black/white in SetUpOffsreen earlier)
-	BeginOffscreen(oTo);
-	if (dh || dv)
-	{
-		Rect destRect = *r;
-		destRect.top    += dv;
-		destRect.bottom += dv;
-		destRect.left   += dh;
-		destRect.right  += dh;
-		CopyBits(from, to, r, &destRect, srcCopy, NULL);
-	}
-	else
-		CopyBits(from, to, r, r, srcCopy, NULL);
-	EndOffscreen(oTo);
-
-	if (!alreadyLockedFrom) UnlockPixels(GetGWorldPixMap(oFrom->g));
-	if (!alreadyLockedTo)   UnlockPixels(GetGWorldPixMap(oTo->g));
-}
-
-void BeginOffscreen(Offscreen * const o)
-// note:  this leaves pixels locked
-{
-	AssertMesgReturn(o->inited, "tried to BeginOffscreen on an un-inited Offscreen", );
-
-	o->wasLockedBeforeBeginOffscreen = GWORLDPIXELS_LOCKED(o->g);
-
-	if (!o->wasLockedBeforeBeginOffscreen) AssertFatal(LockPixels(GetGWorldPixMap(o->g)));  // should never fail for nonpurgeable pmap
-	
-	GetGWorld(&o->savePort, &o->saveDevice);
-	SetGWorld(o->g, NULL);
-	
-	o->calledBeginOffscreen = true;
-}
-
-void EndOffscreen(Offscreen * const o)
-// note:  this restores original pixel locked/unlocked state from when BeginOffscreen
-// was called
-{
-	AssertMesgReturn(o->inited, "tried to EndOffscreen on an un-inited Offscreen", );
-	AssertMesgReturn(o->calledBeginOffscreen, "tried to EndOffscreen without BeginOffscreen", );
-
-	SetGWorld(o->savePort, o->saveDevice);
-
-	if (!o->wasLockedBeforeBeginOffscreen) UnlockPixels(GetGWorldPixMap(o->g));
-	
-	o->calledBeginOffscreen = false;
-}
-
-// ========== BTMP resource utilities
-
-// Creates a BTMP resource from something on screen 
-// (mainly intended during dev time)
-void CreateBTMPResourceFromScreen(const Rect * const r, const short id, Str255 resName)
-{
-	const BitMap *from = (BitMap *) *(**MainDevice).gdPMap;
-	Handle h;
-	BTMP *btmp;
-
-	const int rowBytes = BITS_ROWBYTES(r->right - r->left);	
-
-	const long btmpSize = sizeof(BitMap) + rowBytes * (r->bottom - r->top);
- 	btmp = (void *) NewPtr(btmpSize);
-	
-	btmp->bitMap.bounds   = *r;
-	btmp->bitMap.rowBytes = rowBytes;
-	btmp->bitMap.baseAddr = (Ptr) &btmp->bits;
-	
-	CopyBits(from, &btmp->bitMap, r, r, srcCopy, NULL);
-	
-	btmp->bitMap.baseAddr = NULL;  // must be populated on load
-	
-	if (CheckFatal(PtrToHand(&btmp->bitMap, &h, btmpSize)))
-	{
-		AddResource(h, 'BTMP', id, resName);
-		
-		if (CheckFatal(ResError()))
-		{
-			WriteResource(h);
-			CheckFatal(ResError());
-		}
-
-		DisposeHandle(h);		
-	}
-}
-
-void PlotBTMP(BTMP ** const btmp, const BitMap * dest, const Rect * const r, 
-	const short mode, const RgnHandle mask)
-// dest == NULL:  copy to MainDevice
-{
-	if (!dest)
-		dest = (BitMap *) *(**MainDevice).gdPMap;
-
-	HLock((Handle) btmp);
-	(**btmp).bitMap.baseAddr = (Ptr) &(**btmp).bits;
-
-	CopyBits(&(**btmp).bitMap, dest, &(**btmp).bitMap.bounds, r, mode, mask);
-
-	(**btmp).bitMap.baseAddr = NULL;	
-	HUnlock((Handle) btmp);
-}
-
-void PlotBTMPAtXY(BTMP ** const btmp, const BitMap * dest, const short x, const short y, 
-	const short mode, const RgnHandle mask)
-{
-	Rect r;
-	const Rect * const bounds = &(**btmp).bitMap.bounds;
-	
-	r.top    = y;
-	r.left   = x;
-	r.bottom = y + bounds->bottom - bounds->top;
-	r.right  = x + bounds->right  - bounds->left;
-	
-	PlotBTMP(btmp, dest, &r, mode, mask);
-}
-
-// ========== Saving pixels under a window
-
-Offscreen *SavePixelsUnderWindow(WindowPtr w, long flags)
-// 	flags:  same as for SetUpOffscreen(), above
-{
-	Offscreen *offscreen = (Offscreen *) NewPtr(sizeof(Offscreen));
-	Rect r;
-	Point corner;
-	
-	if (!Assert(offscreen))
-		return NULL;
-
-	AssertMesg(!((WindowPeek) w)->visible, "saving pixels but new window already shown?");
-	
-	r = GetGlobalWindowStrucRect(w);  // note this temp shows/hides the window offscreen
-	SectRect(&r, &WMgrPort->portRect, &r);
-
-	if (  !EmptyRect(&r)
-		&& SetUpOffscreen(offscreen, &r, 0, flags)
-		&& LockPixels(GetGWorldPixMap(offscreen->g)))
-	{
-		SavePixels(offscreen, &r);
-		UnlockPixels(GetGWorldPixMap(offscreen->g));
-	}
-	else
-	{
-		// empty rect, or failed -- 
-		// RestorePixels...() will notice NULL pointer and do nothing;
-		// normal updating will happen eventually
-		DisposePtr((Ptr) offscreen);
-		offscreen = NULL;
-	}
-
-	return offscreen;
-}
-
-void RestorePixelsUnderWindow(Offscreen *offscreen)
-{
-	// TODO NEW:  if LockPixels fails below (e.g. pixMap was purged), we correctly
-	// skip the restore but never CleanUpOffscreen/DisposePtr, so the GWorld and the
-	// Offscreen struct leak
-
-	if (offscreen  // (if NULL, something went wrong in setup, just use normal updating)
-		&& LockPixels(GetGWorldPixMap(offscreen->g)))  // (if failed, pixMap maybe purged, use normal updating)
-	{
-		WindowPtr w;
-		Rect offRect = offscreen->g->portRect;		
-		GrafPtr savePort;
-
-		RestorePixels(offscreen, &offRect);
-
-		GetPort(&savePort);
-		
-		// validate any front-app windows that intersect the rect
-		for (w = FrontWindow(); w; w = (WindowPtr) ((WindowPeek) w)->nextWindow)
-		{
-			Rect r = offRect;
-			GlobalToLocalRectForPort(w, &r);
-			SectRect(&r, &w->portRect, &r);
-			SetPort(w);
-			ValidRect(&r);
-		}
-		
-		SetPort(savePort);
-		
-		CleanUpOffscreen(offscreen);
-		DisposePtr((Ptr) offscreen);
-	}
-}
-
-// =========== InitManagers
-
-static void _DefaultResumeProc(void);
-
-static void _DefaultResumeProc(void)
-{
-	ExitToShell();
-}
-
-void InitManagers(ProcPtr resumeProc)
-{
-	MoreMasters();
-	
-	InitGraf(&thePort);
-	InitFonts();
-	InitWindows();
-	InitMenus();
-	TEInit();
-	InitDialogs(resumeProc ? resumeProc : _DefaultResumeProc);
-	InitCursor();
-	FlushEvents(everyEvent, 0);
-}
-
-// ========== Hide/ShowMenuBar
-
-// These are simple versions from Knaster, Macintosh Programming Secrets (2e0,
-// p. 492ff.  I did much more elaborate versions for Exposé, see that code for details.
-
-void HideMenuBar(HideMenuBarData *data, Boolean allowClicks)
-// data:  a pointer to a place to store things we should remember,
-// used so we don't make any assumptions about A5 globals here etc.
-// must be initialized (all zeros is fine) before first use.
-{
-	if (!data->hidden)
-	{
-		const RgnHandle menuRgn = NewRgn();
-		const WindowPeek frontW = (WindowPeek) FrontWindow();
-		
-		data->oldMBarHeight = MBarHeight;
-		
-		if (!allowClicks)  // set allowClicks to let user pull down invisible menus
-			MBarHeight = 0;
-		
-		if (!data->oldGrayRgn)
-			data->oldGrayRgn = NewRgn();
-		
-		CopyRgn(GrayRgn, data->oldGrayRgn);
-		
-		{
-			Rect r = (**MainDevice).gdRect;
-			r.bottom = data->oldMBarHeight;
-			RectRgn(menuRgn, &r);
-		}
-		
-		UnionRgn(GrayRgn, menuRgn, GrayRgn);
-		PaintBehind(frontW, menuRgn);
-		CalcVisBehind(frontW, menuRgn);
-		DisposeRgn(menuRgn);
-		
-		data->hidden = true;
-	}
-}
-
-void ShowMenuBar(HideMenuBarData *data)
-{
-	if (data->hidden)
-	{
-		const WindowPeek frontW = (WindowPeek) FrontWindow();
-
-		MBarHeight = data->oldMBarHeight;
-		
-		AssertMesgReturn(data->oldGrayRgn, "oldGrayRgn is NULL in ShowMenuBar", );
-		CopyRgn(data->oldGrayRgn, GrayRgn);
-		
-		{
-			// repurpose oldGrayRgn for a sec to hold the new menu bar region
-			Rect r = (**MainDevice).gdRect;
-			r.bottom = data->oldMBarHeight;
-			RectRgn(data->oldGrayRgn, &r);
-		}
-
-		PaintBehind(frontW, data->oldGrayRgn);
-		CalcVisBehind(frontW, data->oldGrayRgn);
-
-		DrawMenuBar();
-	
-		data->hidden = false;
-		DisposeRgn(data->oldGrayRgn);	
-		data->oldGrayRgn = NULL;
-	}
-}
