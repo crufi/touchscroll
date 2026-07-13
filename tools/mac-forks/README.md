@@ -220,7 +220,7 @@ exits 0, so a naive exit-status check doesn't catch it either).
 
 Runs `export.sh` at the end, so tracked `.hqx`/`.r` sidecars immediately
 reflect whatever came back -- without this, the working tree has fresh
-content but `image.mk`'s `TRACKED_FILES` dependency (which watches the
+content but `image.mk`'s `tracked-files stamp` dependency (which watches the
 *sidecars*, not the real files) never changes, so the `.img` never
 rebuilds and [`guard-overwrite.sh`](#guarding-against-overwriting-in-emulator-edits-guard-overwritesh)
 keeps warning even right after a successful pull. `git status`/`git

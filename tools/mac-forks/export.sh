@@ -114,7 +114,16 @@ git -c core.quotePath=false ls-files | while IFS= read -r tracked; do
     fi
     grep -qxF "$real" "$manifest" 2>/dev/null && continue
     [ -e "$real" ] && continue
-    git rm -q -- "$tracked"
+    # git rm refuses (exits nonzero) if the sidecar has staged-but-uncommitted
+    # changes -- e.g. a file pull-from-disk.sh just rescued, whose real file was
+    # then deleted before its first commit. That refusal is protecting the only
+    # copy of that content, so don't -f past it; explain the choice instead.
+    if ! git rm -q -- "$tracked" 2>/dev/null; then
+        echo "$0: sidecar \"$tracked\" is staged for commit, but its real file (\"$real\") is gone." >&2
+        echo "  keep it:  sh tools/mac-forks/import.sh   (rematerializes \"$real\", then commit again)" >&2
+        echo "  drop it:  git restore --staged \"$tracked\" && rm \"$tracked\"" >&2
+        exit 1
+    fi
     echo "removed stale sidecar: $tracked"
 done
 
