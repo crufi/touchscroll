@@ -30,7 +30,7 @@ endif
 
 VERSION      ?= $(shell git describe --tags --always --dirty)
 RELEASE_DIR  ?= dist
-RELEASE_NAME := $(notdir $(CURDIR))-$(VERSION)
+RELEASE_NAME := $(PROJECT)-$(VERSION)
 RELEASE_ZIP  := $(RELEASE_DIR)/$(RELEASE_NAME).zip
 
 .PHONY: release release-clean
