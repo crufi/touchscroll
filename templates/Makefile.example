@@ -5,6 +5,7 @@
 
 SNOW_WORKSPACE ?= $(HOME)/Snow/your-workspace.snoww   # point this at your own workspace
 TEXT_CREATOR   := KAHL                                 # or whatever your vintage toolchain expects
+VOLUME_LABEL   := My Project                           # HFS volume name shown in the emulator -- spaces/apostrophes fine
 
 include tools/mac-forks/snow.mk
 include tools/mac-forks/release.mk

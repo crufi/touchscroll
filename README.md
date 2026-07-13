@@ -4,7 +4,7 @@ Git tools for tracking classic Mac OS files that mainly live in their **resource
 fork** rather than their data fork — project files, ResEdit resource files,
 anything from the Symantec/THINK C/CodeWarrior/MPW era.
 
-New to this? Jump to [Setting up a new project](#setting-up-a-new-project)
+See [Setting up a new project](#setting-up-a-new-project)
 below for a step-by-step checklist. The rest of this README explains what
 each piece does and why.
 
@@ -221,7 +221,7 @@ exits 0, so a naive exit-status check doesn't catch it either).
 Runs `export.sh` at the end, so tracked `.hqx`/`.r` sidecars immediately
 reflect whatever came back -- without this, the working tree has fresh
 content but `image.mk`'s `TRACKED_FILES` dependency (which watches the
-*sidecars*, not the real files) never changes, so `disk.img` never
+*sidecars*, not the real files) never changes, so the `.img` never
 rebuilds and [`guard-overwrite.sh`](#guarding-against-overwriting-in-emulator-edits-guard-overwritesh)
 keeps warning even right after a successful pull. `git status`/`git
 diff` afterward show exactly what came back from the emulator, same as
@@ -274,41 +274,60 @@ TEXT_CREATOR   := KAHL                                 # required -- your toolch
 include tools/mac-forks/snow.mk
 ```
 
-Gives you `make`/`make all` (builds both `disk.img` and `disk.hda`), `make
-run` (builds, then launches Snow with it attached), `make pull` (pulls
-edits back out of the *existing* `disk.hda` -- see
+Gives you `make`/`make all` (builds both `<project>.img` and
+`<project>.hda`), `make run` (builds, then launches Snow with it
+attached), `make pull` (pulls edits back out of the *existing* `.hda` --
+see
 [Pulling edits back out of a disk image](#pulling-edits-back-out-of-a-disk-image-pull-from-disksh)
 above; deliberately doesn't trigger a rebuild first, since that would
 destroy the very edits it's meant to rescue), and `make clean`.
-`SNOW_PATH`, `VOLUME_BLOCKS`, `VOLUME_LABEL`, and `BUILD_DIR` all have
-reasonable defaults (see the top of `snow.mk`) but can be overridden the
+
+Artifacts are named after the project: `PROJECT` defaults to the repo
+directory's own name (`todays-the-day` → `build/todays-the-day.img`,
+`todays-the-day.hda`, `todays-the-day.snoww`, and the release zip). It
+has to stay a filesystem-safe slug -- Make splits prerequisite lists on
+whitespace, so a target with a space in its name can't work. The pretty,
+human name goes in `VOLUME_LABEL` instead -- the HFS volume name shown
+inside the emulator, where spaces and apostrophes are fine:
+
+```makefile
+VOLUME_LABEL := Today's the Day
+```
+
+Left unset, the volume is just named after the `PROJECT` slug.
+`SNOW_PATH`, `VOLUME_BLOCKS`, and `BUILD_DIR` also have reasonable
+defaults (see the top of `snow.mk`/`image.mk`) and can be overridden the
 same way, set before the `include` line.
 
 ### Guarding against overwriting in-emulator edits (`guard-overwrite.sh`)
 
-Rebuilding `disk.hda` (via `djjr convert to-device`) or running `make
+Rebuilding the `.hda` (via `djjr convert to-device`) or running `make
 clean` both destroy whatever's currently on it -- fine normally, not fine
 if it holds edits `make pull` hasn't rescued yet. Both are gated by
 `guard-overwrite.sh`, which checks two things before letting either
 proceed:
 
-- **Whole-image**: is `disk.hda` itself newer than the `disk.img` it was
+- **Whole-image**: is the `.hda` itself newer than the `.img` it was
   last converted from (plus a small tolerance for normal build
   sequencing)?
 - **Per-file**: does any individual file's HFS catalog modification date
   (`hls -l`) fall after that same reference point?
 
-Both are compared against `disk.img`'s own mtime, not local source files
+Both are compared against the `.img`'s own mtime, not local source files
 directly -- a build always happens strictly after the local files it
 reads, so comparing against local mtimes flags every ordinary build for
 no real reason (confirmed; that was the first version's bug). The check
-also has to run *before* anything else touches `disk.img`/`disk.hda` this
-invocation -- `snow.mk`/`release.mk` list it as the first prerequisite of
-every target that can destroy `disk.hda`, ahead of the image-build rule
-itself, so the comparison sees things exactly as they were before this
-`make` invocation started.
+runs *after* the `.img` has had its chance to rebuild but *before*
+anything touches the `.hda` -- so the comparison uses the freshest
+possible reference (crucially, that's what lets a `make pull` actually
+clear the warning: the pull regenerates the tracked sidecars, the next
+`make` rebuilds the `.img` from them, and only then does the guard
+compare). To keep repeated no-op builds from drifting the two apart
+purely by wall-clock time, the `.hda`'s mtime is pinned to the `.img`'s
+after every conversion -- the only way they diverge is something else
+(the emulator) writing to the `.hda` in between.
 
-The per-file check also catches files that exist on `disk.hda` with no
+The per-file check also catches files that exist on the `.hda` with no
 tracked/local counterpart at all -- created directly in the emulator,
 never pulled before -- and lists those separately, in green.
 
@@ -316,7 +335,7 @@ If either check trips, it prints exactly what it found and requires
 typing a phrase before continuing: `BORK N` (N = the number of specific
 files flagged) if the per-file check caught anything, or `BORK DISK` if
 only the whole-image check did. Anything else aborts -- the existing
-`disk.hda` is left untouched, and the calling `make` target fails.
+`.hda` is left untouched, and the calling `make` target fails.
 
 Set `FORCE=1` (e.g. `make run FORCE=1`) to skip the check entirely --
 needed for non-interactive use, since the prompt reads from stdin and
@@ -342,7 +361,7 @@ falls back to `git describe`, using the commit hash if the repo has no
 tags yet). Writes to `dist/` by default (`RELEASE_DIR`, overridable).
 
 If the including project's Makefile also pulled in `snow.mk` (before
-`release.mk`), the zip bundles `disk.hda` alongside `disk.img` --
+`release.mk`), the zip bundles the `.hda` alongside the `.img` --
 `DEVICE_IMAGE` being defined is what triggers this, so it's automatic, not
 a separate flag. Projects that never use Snow don't get a `.hda` and don't
 pick up a `djjr` dependency just from including `release.mk`.

@@ -10,9 +10,24 @@ MAC_FORKS_IMAGE_MK := 1
 
 BUILD_DIR     ?= build
 VOLUME_BLOCKS ?= 8192   # 512-byte blocks = 4MB; bump if the project outgrows it
-VOLUME_LABEL  ?= Source
 
-HFS_IMAGE := $(BUILD_DIR)/disk.img   # plain HFS, floppy format -- build-floppy.sh's native output
+# The project's name, two ways:
+#
+# PROJECT names the build artifacts (<project>.img/<project>.hda, the
+# Snow workspace, the release zip) and defaults to the repo directory's
+# own name. It has to stay a filesystem-safe slug: Make splits
+# prerequisite lists on whitespace, so a file target with a space in it
+# ("Today's the Day.hda") genuinely cannot work as a Make target --
+# don't override this with anything containing spaces.
+#
+# VOLUME_LABEL is the HFS volume name shown inside the emulator, where
+# spaces and apostrophes are fine and pretty ("Today's the Day") --
+# set it in your project's Makefile; left unset it falls back to the
+# PROJECT slug.
+PROJECT      ?= $(notdir $(CURDIR))
+VOLUME_LABEL ?= $(PROJECT)
+
+HFS_IMAGE := $(BUILD_DIR)/$(PROJECT).img   # plain HFS, floppy format -- build-floppy.sh's native output
 
 # Every tracked file is a potential input (sidecars for forked files,
 # real files directly for mactext ones) -- without this, the rule only
@@ -23,8 +38,14 @@ HFS_IMAGE := $(BUILD_DIR)/disk.img   # plain HFS, floppy format -- build-floppy.
 # showing up in Snow long after the source was actually correct.
 TRACKED_FILES := $(shell git -c core.quotePath=false ls-files)
 
+# Label and creator are quoted because a real VOLUME_LABEL has spaces
+# and an apostrophe ("Today's the Day") -- and $(strip ...)ed because
+# Make keeps the trailing whitespace sitting between a variable's value
+# and an inline # comment (`FOO := KAHL   # comment` makes FOO
+# "KAHL   "), which unquoted expansion used to hide and quoting would
+# otherwise bake into the value.
 $(HFS_IMAGE): tools/mac-forks/import.sh $(TRACKED_FILES)
 	sh tools/mac-forks/import.sh
-	sh tools/mac-forks/build-floppy.sh $@ $(VOLUME_BLOCKS) $(VOLUME_LABEL) $(TEXT_CREATOR)
+	sh tools/mac-forks/build-floppy.sh $@ $(strip $(VOLUME_BLOCKS)) "$(strip $(VOLUME_LABEL))" "$(strip $(TEXT_CREATOR))"
 
 endif
