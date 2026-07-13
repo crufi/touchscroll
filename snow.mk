@@ -49,6 +49,13 @@ WORKSPACE := $(SNOW_PATH)/$(PROJECT).snoww
 # intermediate.
 all: $(DEVICE_IMAGE)
 
+# ... and `all` has to be pinned as the default goal explicitly: the
+# image.mk include above defines $(HFS_IMAGE)'s rule first, and Make's
+# default goal is the first target parsed, not the first in this file --
+# confirmed: without this, a plain `make` built only disk.img and left a
+# stale disk.hda behind, exactly what the comment above promises not to do.
+.DEFAULT_GOAL := all
+
 # guard-overwrite.sh runs before djjr overwrites disk.hda -- if the disk
 # looks like it has edits nothing's pulled back yet (see pull-from-disk.sh
 # and the target below), this stops here rather than silently discarding
