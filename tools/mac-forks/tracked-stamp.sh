@@ -4,8 +4,8 @@
 # the stamp instead of listing tracked files as prerequisites directly.
 #
 # Why the indirection exists at all: Make splits prerequisite lists on
-# whitespace, so a tracked filename containing a space ("TidyMenus
-# cdev.<pi>.rsrc.r" -- completely idiomatic for classic Mac files) read
+# whitespace, so a tracked filename containing a space ("My Project
+# source.<pi>.rsrc.r" -- completely idiomatic for classic Mac files) read
 # straight into a prerequisite list becomes two phantom targets and a
 # hard "No rule to make target" error. Confirmed on a real project.
 # One space-free stamp path sidesteps Make's limitation entirely while
