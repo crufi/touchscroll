@@ -555,7 +555,7 @@ gh repo set-default owner/repo
 Pulling in later mac-forks improvements:
 
 ```sh
-git subtree pull --prefix=tools/mac-forks mac-forks main --squash
+git subtree pull --prefix=tools/mac-forks mac-forks main --squash -m "Pull mac-forks updates"
 ```
 
 Pushing a change you made in-place back upstream:

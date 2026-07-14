@@ -86,6 +86,26 @@ trap 'rm -rf "$tmp_root"' EXIT
 humount 2>/dev/null || true   # in case a previous run left something mounted
 hmount "$disk"
 
+# The start folder scopes EVERY pass below, not just the new-files walk
+# -- tracked files live under it on the volume too. Confirmed the hard
+# way: with the prefix applied only to the walk, the tracked-file passes
+# looked names up at the volume root, found nothing (hcopy's stderr is
+# deliberately swallowed there), and silently updated zero tracked files
+# while the run still ended "done pulling" -- an existing repo pulled
+# against a subfolder was a complete no-op for everything already
+# tracked. Validated up front so a typo'd folder fails loudly instead
+# (hls exits 0 even for a nonexistent path, so stderr is the signal).
+hfs_prefix=
+if [ -n "$start_folder" ]; then
+    hfs_prefix="$(hfsname "$start_folder"):"
+    hls_err=$(hls -l ":${hfs_prefix%:}" 2>&1 >/dev/null)
+    if [ -n "$hls_err" ]; then
+        echo "$0: \"$start_folder\" not found on $disk: $hls_err" >&2
+        humount
+        exit 1
+    fi
+fi
+
 # Forked files: pull as MacBinary (both forks + type/creator in one
 # blob) and decode back into a real macOS file, overwriting whatever's
 # currently reconstituted at that path. Decode into a tmpdir first and
@@ -96,7 +116,7 @@ git -c core.quotePath=false ls-files | while IFS= read -r f; do
     if has_ext_ci "$f" hqx || has_ext_ci "$f" r; then
         real=${f%.*}
         tmp=$(mktemp -d)
-        if hcopy -m ":$(hfsname "$real")" "$tmp/blob.bin" 2>/dev/null; then
+        if hcopy -m ":$hfs_prefix$(hfsname "$real")" "$tmp/blob.bin" 2>/dev/null; then
             macbinary decode -p -C "$tmp" -o restored <"$tmp/blob.bin"
             mkdir -p "$(dirname "$real")"
             rm -rf "${real:?}"
@@ -120,7 +140,7 @@ done
 git -c core.quotePath=false ls-files | while IFS= read -r f; do
     attr=$(git check-attr filter -- "$f" | awk -F': ' '{print $NF}')
     if [ "$attr" = mactext ]; then
-        if hcopy -r ":$(hfsname "$f")" "$f.pulled" 2>/dev/null; then
+        if hcopy -r ":$hfs_prefix$(hfsname "$f")" "$f.pulled" 2>/dev/null; then
             mv "$f.pulled" "$f"
             echo "hcopy -r: $f"
         fi
@@ -198,28 +218,10 @@ walk() {
     done
 }
 
+# (start_folder was already Mac-Roman-converted and validated up top,
+# before the tracked-file passes -- see hfs_prefix.)
 if [ -n "$start_folder" ]; then
-    # start_folder is a plain UTF-8 argument (typed at a modern shell),
-    # but HFS paths are raw Mac Roman bytes -- hfsname() converts the
-    # whole colon-separated string in one pass (':' is plain ASCII,
-    # unaffected either way). Skipping this meant a folder name with any
-    # non-ASCII character (confirmed: a "ƒ") never matched anything on
-    # the volume, and since hls's own error was swallowed below, the
-    # whole run silently did nothing -- "done pulling" with zero files
-    # and no indication anything was wrong.
-    hfs_start=":$(hfsname "$start_folder")"
-    # hls always exits 0 even when the path doesn't exist (it just prints
-    # "no such file or directory" to stderr and moves on) -- confirmed,
-    # can't check via exit status. An existing-but-empty folder produces
-    # no stderr output at all, so any stderr here means the path is
-    # actually wrong.
-    hls_err=$(hls -l "$hfs_start" 2>&1 >/dev/null)
-    if [ -n "$hls_err" ]; then
-        echo "$0: \"$start_folder\" not found on $disk (checked as $hfs_start): $hls_err" >&2
-        humount
-        exit 1
-    fi
-    walk "$hfs_start" ""
+    walk ":${hfs_prefix%:}" ""
 else
     walk "" ""
 fi
