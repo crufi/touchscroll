@@ -26,7 +26,7 @@ Classic Mac projects break modern tooling in specific, silent ways:
 - **Getting code in and out of an emulator is manual drudgery.** `make`
   builds an HFS disk image containing the project, ready to mount in an
   emulator; `make run` attaches it and launches
-  [Snow](https://snowemulator.com) directly. Edit inside the emulator's
+  [Snow](https://snowemu.com/) directly. Edit inside the emulator's
   IDE, then `make pull` brings the changes back into your working tree as
   ordinary git modifications. A safety guard refuses to overwrite a disk
   image that still holds edits you haven't pulled.
