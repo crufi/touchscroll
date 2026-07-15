@@ -163,28 +163,6 @@ You declare which extensions get the filter in your project's
 *.h filter=mactext -text
 ```
 
-### Searching and reading the working tree (`mactext-cat`)
-
-The working-tree files are genuine Mac Roman/CR, which modern search
-tools can't read: ripgrep has no bare-CR line-terminator support
-(`--crlf` is CRLF only), so a vintage file is one giant "line" to it —
-matches are found, but line numbers and output are useless, and Mac
-Roman bytes print as mojibake. `mactext-cat` presents any file as
-UTF-8/LF, converting only what its shape says needs converting (CR-only
-files get the full treatment, Mac-Roman-but-LF files like `.r` sidecars
-get encoding only, valid UTF-8 passes through untouched):
-
-```sh
-tools/mac-forks/mactext-cat foo.c | less          # read a vintage file
-rg --pre tools/mac-forks/mactext-cat 'pattern'    # search with correct lines + chars
-alias rgm="rg --pre tools/mac-forks/mactext-cat"  # worth an alias
-```
-
-Alternatively, `git grep -n --cached 'pattern'` searches the *index*,
-where the `mactext` filter already stored clean UTF-8/LF — no
-preprocessing needed, at the cost of seeing staged content rather than
-unstaged edits.
-
 ### `macroman` — the encoding half alone, for `.r` sidecars
 
 DeRez output embeds raw resource-fork bytes in its hex-dump comments, and
