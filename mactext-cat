@@ -1,0 +1,43 @@
+#!/bin/sh
+# Present a working-tree file as UTF-8/LF on stdout, converting only if
+# it's actually classic Mac text (Mac Roman encoded, CR-only line
+# endings) -- anything else passes through untouched. Shape-driven, like
+# everything else here, so it's safe to point at any file in the repo.
+#
+# Two uses:
+#
+#   1. Reading a vintage file directly on a modern terminal:
+#        tools/mac-forks/mactext-cat foo.c | less
+#
+#   2. As ripgrep's preprocessor -- rg has no bare-CR line-terminator
+#      support (--crlf is CRLF only), so a CR-only file is one giant
+#      line to it: matches are found but line numbers and output are
+#      useless, and Mac Roman bytes print as mojibake. This fixes both:
+#        rg --pre tools/mac-forks/mactext-cat 'pattern'
+#      (worth an alias: alias rgm="rg --pre tools/mac-forks/mactext-cat")
+#
+# Usage: mactext-cat <file>
+set -eu
+export LC_ALL=C
+
+f=${1:?"usage: $0 <file>"}
+
+# Shape detection over the whole file -- these are vintage-sized files,
+# so scanning outright is cheap and beats guessing from a prefix.
+#
+#   CR-only            -> full mactext treatment (Mac Roman + CR->LF)
+#   LF but not UTF-8   -> Mac Roman encoding only, endings untouched
+#                         (the shape of macroman-filtered .r sidecars,
+#                         which DeRez emits LF-native)
+#   valid UTF-8        -> passed through untouched; running the Mac
+#                         Roman conversion on it would corrupt it
+cr=$(tr -cd '\r' <"$f" | wc -c)
+lf=$(tr -cd '\n' <"$f" | wc -c)
+
+if [ "$cr" -gt 0 ] && [ "$lf" -eq 0 ]; then
+    iconv -f MACINTOSH -t UTF-8 <"$f" | tr '\r' '\n'
+elif ! iconv -f UTF-8 -t UTF-8 <"$f" >/dev/null 2>&1; then
+    iconv -f MACINTOSH -t UTF-8 <"$f"
+else
+    cat "$f"
+fi
