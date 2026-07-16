@@ -55,7 +55,9 @@ typedef Boolean bool;
 #define _STATIC_ASSERT_TYPE(cond) 	  		struct { int _ : !!(cond); }
 
 #ifndef __cplusplus
-#define STATIC_ASSERT(cond) 	  			_STATIC_ASSERT_TYPE(cond) anon
+// some prior version of THINK C needed below to be a variable definition (i.e. add
+// 'anon' to it), but no longer true (?) so these are identical now:
+#define STATIC_ASSERT(cond) 	  			_STATIC_ASSERT_TYPE(cond)
 #else
 #define STATIC_ASSERT(cond) 	  			_STATIC_ASSERT_TYPE(cond)
 #endif

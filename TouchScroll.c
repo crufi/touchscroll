@@ -1,7 +1,7 @@
 /* auto-generated (do not modify): type=TEXT creator=KAHL hex=544558544B41484C000000000000000000000000000000000000000000000000 */
 //==================================================================================
 // TouchScroll.c
-// ©2025 Steve Crutchfield
+// ©2026 Steve Crutchfield
 //
 // An extension to enable iOS-style swipe-scrolling for System 6 and 7, intended
 // for use with Jesús Álvarez' excellent iOS port of Mini vMac, which I use daily

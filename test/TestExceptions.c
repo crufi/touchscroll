@@ -19,7 +19,7 @@
 // AssertMesgFatal cases -- they end the program, so no automated check.)
 //==================================================================================
 
-#include "CrutchUtilities.h"
+#include "::CrutchUtilities.h"
 
 static int gChecks, gFailures;
 
