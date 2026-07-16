@@ -5,58 +5,61 @@
 //
 // An extension to enable iOS-style swipe-scrolling for System 6 and 7, intended
 // for use with Jesús Álvarez' excellent iOS port of Mini vMac, which I use daily
-// on my iPad.
+// on my iPad. Includes inertial scrolling and rubberbanding, and adds rubber-band
+// indicator on normal (non-swipe) scroll arrow use when at either end of a document, 
+// too.
+//
+// To try it without a touchscreen, just drag the mouse vertically really fast ...
+//
+// Note that "fast forward"-style emulation (Snow, etc.) that actually accelerates
+// the system's wall clock/_Microseconds renders TouchScroll awkward to use, since
+// our logic for guessing if something is really a human-muscle-timed swipe gets
+// borked in that case. Recommend using at real speed only, or with emulators like
+// Mini vMac which just speed up CPU instruction processing without messing with the 
+// system clock (a better approach, in my opinion, though Snow is otherwise amazing).
+//
+// This code was never properly cleaned up and is not intended as a demo of perfect
+// '90s coding hygiene (my TidyMenus cdev is better in that respect!). But it works
+// very well; I have used it personally for several years now. I hope others may find
+// it useful, though concede that "heavy Mini vMac users on iPad" is a pretty small
+// audience.
 //==================================================================================
 
 //#undef DEBUG
 
 /*
-TODOs for beta release:
+TODO:
+
+- FindControl should do nothing if click was really in a control - see above
+
+- Confirm fixed:
 
     - STILL doesn't work - bottom side when bounce off bottom
 		... see +++ below
 
-	- recompile without DEBUG
-	
-	- check other TODOs below in code, but pretty sure none are pressing
-
-- Later
+WISHLIST:
 
   * smoother subparital scrolling in drag-scroll case
-
   * see GrabscrollingrectandDV - do I really ever need 'old school' scrollingrectandddv
     ... can I just always use the NSB one which is more available???
-
   * wrap it in a CDEV with lots of settings exposed so people can screw around (And
     "defaults" button)
-
+	* (idea - "generic configs cdev" that takes any collection of params and
+		builds a UI around them based on data type etc with range validation,
+		group boxes, etc ... will never do this but it's a nice idea)
   * Control Mgr Asssumes window top left is 0,0 (see *** below)
-    or else people should setorigin. 
-    Interesting! 
-    Does that Elim need for some of my code ????
-  
+    or else people should setorigin.  does that eliminate need for some of this code?
   * include application Skip List
-  
-  * fun idea - "generic configs cdev" that takes any collection of params and
-    builds a UI around them based on data type etc with range validation,
-    group boxes, etsc ... maybe another day!
-    
-  * horizontal scrolling??  maybe not ....
-  
+  * horizontal scrolling??  maybe not .... a lot of mechanics, probably little payoff
   * add OptionPageUp in here with a checkbox in cdev
   
 - Notes
-
   * supports vertical scrolling only
-  
   * stop inertial scrolling on an keypress, including e.g. Shift, as a quick 'brake'
     when you see what you're looking for (except Command)
-    
   * when inertially scrolling, hold Command for "turbo mode" to scroll faster -- 
     tap Command repeatedly to accelerate to max speed
-    
   * tries not to activate if Finder in 'by Icon' or 'by Small Icon' view (at least in 7.5.5)
-  
   * not actually a cdev yet despite icon - soon, if people besides me use it?
 
 - Known shortcomings
@@ -66,7 +69,7 @@ TODOs for beta release:
     prevents TouchScroll from working, since we have no way of checking if there
     is a vertical scroll bar in the window when the user starts dragging.  (I guess
     we could keep our OWN list of ControlHandles around based on NewControl calls
-    but that seems awfully weird.)
+    but that seems awfully ad hoc.)
   
   * some apps (ResEdit hex dump views) scroll without using CopyBits or ScrollRect,
     instead (wastefully!) redrawing the entire contents of a window.  This prevents
@@ -84,10 +87,10 @@ TODOs for beta release:
     content "above" the visible area).  This is likely not fixable, apps like this
     should probably just go on the skip list once that feature is implemented.
   
-  * some apps (THINK Project Manager) stop processing update events (uncovered 
+  * some apps (THINK Project Manager/SymC++) stop processing update events (uncovered 
   	editor windows may appear blank rather than being filled with text) if very low 
   	on memory - TouchScroll can trigger this circumstance sometimes it seems.  
-  	Quitting and restrating the app fixes it with no harm done.
+  	Quitting and restarting the host app fixes it with no harm done.
   
   * see TODO below re THINK Project Manager, also
 */
@@ -96,45 +99,43 @@ TODOs for beta release:
 Here's why we chose this approach:  in short, it's weirdly impossible to know a control's
 actual position at an arbitrary time.
 
-*** IS THIS TRUE?  IM I:314 says control mgr just assumes origin is (0,0) and 
-everyone must call setorigin(0,0) if it's not before calling the control mgr!
-it's likely that controlRects are ALWAYS just relative to (0,0) being topleft!
-does this let me simplify approach here?
+	*** IS THIS TRUE?  IM I:314 says control mgr just assumes origin is (0,0) and 
+	everyone must call setorigin(0,0) if it's not before calling the control mgr!
+	it's likely that controlRects are ALWAYS just relative to (0,0) being topleft!
+	does this let me simplify approach here? ***
 
 Apps that scroll the main window may use of of several approaches.  They may leave
 the GrafPort alone and just move the drawing.  Or they might use SetOrigin to
 move the GrafPort, and use MoveControl to keep the controls in the right place on-
-screen (***really?????).  Or (and this is the tricky part) they might use SetOrigin to move the GrafPort
-but NOT bother to move the controls, and rely on the fact that they only need 
-(for example) scroll bars' contrlRect to be correct at certain known times, e.g. 
-when they call _FindControl or _TrackControl, and do a SetOrigin only right before 
+screen (***really???).  Or (and this is the tricky part) they might use SetOrigin to 
+move the GrafPort but NOT bother to move the controls, and rely on the fact that they 
+only need  (for example) scroll bars' contrlRect to be correct at certain known times, 
+e.g. when they call _FindControl or _TrackControl, and do a SetOrigin only right before 
 those calls.  (It turns out MacPaint 2.0 does this, among probably many other apps,
-because why not?)A
+because why not?)
 
 The trouble is we don't know which approach an app is using, therefore we have know
 way to tell if the contrlRect we see at the time of a _SystemEvent call is actually
 in terms of the window's local coordinate system (as determined by its portBits.bounds)
 or something else entirely.  Therefore we can't hit-test a control in _SystemEvent,
-or know where to fake a mouse-click in a scroll arrow in _OSEventAvail.  But we DO 
-know that a contrlRect is correct when an app calls FindControl.  So the only 
+or know where to fake a mouse-click in a scroll arrow in _OSEventAvail.  *But we DO 
+know that a contrlRect is correct when an app calls FindControl*.  So the only 
 approach that's guaranteed to work is to have _FindControl (1) do nothing if
-the mouse was REALLY clicked (earlieer) in a control (check by saving the earlier
+the mouse was REALLY clicked (earlier) in a control (check by saving the earlier
 theEvent->where) or (2) scroll by returning a fake part code hit if not, and if
-gWeAreScrolling is true, based on last mouse move seen by _OSEventAvail patch.gin
+gWeAreScrolling is true, based on last mouse move seen by _OSEventAvail patch.
 
+	* Note to self - could this be breaking my expose cdev somehow too? (the setorigin?) 
+	I think not but should check ...
 
-* could this be breaking expose somehow too?  the setorigin ??? I think not ....
+THE APPROACH:
 
-Approach:
-SystemEvent sets gWeAreScrolling
-OSEventAvail determines desired part code and fakes a mouse click (based on fake coord)
+- SystemEvent sets gWeAreScrolling
+- OSEventAvail determines desired part code and fakes a mouse click (based on fake coord)
 	and send mouseup then too
-(no need to patch FindWindow because we only care about swipes in front window anyway)
-FindControl sees our fake click, returns desired part code
-TrackControl gets part code for our fake click and forces mouse point to be right!
-
-TODO
-FindControl do nothing if click was really in a control - see above
+- (no need to patch FindWindow because we only care about swipes in front window anyway)
+- FindControl sees our fake click, returns desired part code
+- TrackControl gets part code for our fake click and forces mouse point to be right!
 */
 
 #include <SetUpA4.h>
@@ -146,7 +147,7 @@ FindControl do nothing if click was really in a control - see above
 #include <SANE.h>
 #include <limits.h>
 
-#define NEED_EXTRA_TOOLBOX_HEADERS
+#define NEED_EXTRA_TOOLBOX_HEADERS // for _Microseconds
 #include "CrutchUtilities.h"
 
 // we stuff this in theEvent->message for mouseUp/mouseDown events (which normally
@@ -337,6 +338,7 @@ void StopScrolling(void)
 }
 
 Boolean ControlIsAReasonableVerticalScrollBar(ControlHandle c)
+// given a control, is it plausibly a vertical scroll bar we might automate here?
 {
 	if ( c && *c
 		&& (**c).contrlVis
@@ -359,6 +361,8 @@ Boolean ControlIsAReasonableVerticalScrollBar(ControlHandle c)
 }
 
 ControlHandle FindAVerticalScrollBar(WindowPtr w, Point localP)
+// we need to figure out which scroll bar a swipe is supposed to control!
+//
 // look for a vertical scroll bar in the front window and appropriately
 // positioned relative to the mouse
 //
@@ -422,8 +426,9 @@ WindowPeek FrontNonPaletteWindow(void)
 }
 
 pascal short PatchedSystemEvent(EventRecord *e)
-// the point of this patch is to determine if we started a fast drag, eat the mouseDown
-// event if so, and set up global vars for our Time Mgr task to begin scrolling
+// the point of this patch is to determine if we started a fast drag (i.e. possible 
+// swipe): eat the mouseDown event if so, and set up global vars for our Time Mgr task to 
+// begin scrolling
 {
 	Boolean weProcessedIt = false;
 	ProcessSerialNumber frontProcess;
@@ -566,7 +571,7 @@ MouseCheckerResult MouseChecker(void)
 // do periodic mouse location check stuff inside TrackControl loop
 // return TRUE if part code needs to change (exit and re-call TrackControl)
 //
-// SIDE EFFECT - and changes gPartCode to correspond to that mouse movement
+// SIDE EFFECT - changes gPartCode to correspond to that mouse movement
 {
 	Point p = MOUSE;
 	MouseCheckerResult result = kNoOp;
@@ -641,14 +646,14 @@ void PostClickFromPartCode(short partCode)
 	//
 	// need to try a real-ish point here because some apps (ResEdit) stubbornly 
 	// grab a copy of event->where and _PtInRect it to ensure it's in a reasonable
-	// place
+	// place - why are you trying to ruin my hacky patches, ResEdit?
 	// 
 	// *** 
 	// due to uncertainty about control coordinates (see notes above) at times other
 	// than when a Control Mgr call is being made, we do this by checking if the
 	// contrlRect is reasonably within portRect.  if it is -- use it.  if not, the 
 	// coord systems are presumably wonky, and just use a strip at the right edge of 
-	// portRect.  ths point is just to get a point that the app thinks is reasonlby
+	// portRect.  ths point is just to get a point that the app thinks is reasonably
 	// inside a control, so that, if it checks the point first, it will still later 
 	// call TrackControl etc.
 	
@@ -678,7 +683,7 @@ void PostClickFromPartCode(short partCode)
 }
 
 pascal short PatchedFindWindow(Point p, WindowPtr *w)
-// prevent floating palettes don't "get in the way" and get returned by FindWindow
+// so floating palettes don't "get in the way" and get returned by FindWindow
 // instead of our desired scrolling window
 {
 	WindowPtr frontW;
@@ -688,7 +693,7 @@ pascal short PatchedFindWindow(Point p, WindowPtr *w)
 	if (gWeAreScrolling
 		&& (WindowPtr) FrontNonPaletteWindow() == (frontW = (**gTheScrollBar).contrlOwner))
 	{
-		*w = frontW;
+		*w = frontW;  // we are scrolling, return "our" scrolly window not a palette floating atop it
 		RestoreA4();
 		return inContent;
 	}
@@ -737,7 +742,7 @@ pascal short PatchedFindControl(Point p, WindowPtr w, ControlHandle *c)
 	
 	SetUpA4();
 	
-	// TODO add a check to ensure this is really from our click ???
+	// TODO add a check to ensure this is really from our click? hasn't seemed needful though
 
 	if (gWeAreScrolling
 		&& gPartCode 
@@ -777,7 +782,7 @@ pascal short PatchedFindControl(Point p, WindowPtr w, ControlHandle *c)
 	if (!didIt)
 		result = CALL_ORIG_TRAP(FindControl) (p, w, c);
 
-	// Note, this one is a tail patch
+	// note, this one is a tail patch
 	
 	trace("set gNSBLastFindControlPartCode to %d", result);
 	gNSBLastFindControlPartCode = result;				
@@ -788,6 +793,8 @@ pascal short PatchedFindControl(Point p, WindowPtr w, ControlHandle *c)
 }
 
 void CallActionProc(ControlHandle c, ActionProc action, short partCode)
+// given a control, partcode, and an action proc, call the action proc 
+// (or the control's default action proc if 'action' is odd)
 {
 	// note - DebugStr is slow!  putting any in here (since it's called in a loop)
 	// will visibly slow inertial scrolling, even with 'dx' off in Macsbug
@@ -807,9 +814,7 @@ void CallActionProc(ControlHandle c, ActionProc action, short partCode)
 		// before it calls TrackControl, 
 		//
 		// * the 'THINK C' THINK Project Manager 6.0.1 saves TICKS+10 at -0x54B2(A5).  
-		//
 		// * the 'Symantec C++ 6.0' THINK Project Manager does it at -0x5314(A5).  
-		//
 		// * the 'Symantec C++ 7.0' THINK Project Manager does it at -0x59F0(A5).
 		//
 		// Any calls to the actionProc it provides to
@@ -818,9 +823,11 @@ void CallActionProc(ControlHandle c, ActionProc action, short partCode)
 		// so to prevent this delay, I check those memory locations explicity.  If
 		// either are greater than TICKS but <= TICKS+10, I assume it's THINK's scroll
 		// delay time, and I replace it with the current value of TICKS.  This makes
-		// scrolling much smoother-looking in THINK C files.
+		// scrolling much smoother-looking in THINK C files, which was an important
+		// use case since I literally was developing this in THINK C on an iPad
+		// and found TouchScroll very useful in the editor during its own construction...
 		//
-		// TODO check/make this work for other versions of THINK C!
+		// TODO check/make this work for other versions of THINK C/SymC++!
 
 		if (gThinkCVersion == 0x0600)  // maybe it's Symantec C++ 6.0
 		{
@@ -908,6 +915,8 @@ short CalcInertialInterval(long dt, short dv)
 
 Boolean StartPartialScrollTimerIfApplicable(Timer *partialScrollTimer, 
 	short inertialInterval, long lastPartialScrollDurationMS)
+// "partial scrolling" == purely cosmetic scrolling a few pixels at a time (less than a full 
+// text line/scrollbar increment) to smooth things out visually
 {
 	if (inertialInterval > MIN_INERTIAL_INTERVAL_TO_PARTIALLY_SCROLL)
 	{
@@ -929,6 +938,7 @@ Boolean StartPartialScrollTimerIfApplicable(Timer *partialScrollTimer,
 }
 
 void DoInertialMode(ControlHandle c, ActionProc action, short inertialInterval)
+// "intertial mode" == user has lifted finger off touchpad, but we keep scrolling for a while
 // assumes port already set up for us (by PatchedTrackControl)
 {
 	Timer realScrollTimer, partialScrollTimer;
@@ -1057,7 +1067,7 @@ void DoInertialMode(ControlHandle c, ActionProc action, short inertialInterval)
 					&& newInertialInterval <= inertialInterval + inertialInterval/5)
 				{
 					// new interval approximately the same as old one --
-					// assume user was tryingto speed it up
+					// assume user was trying to speed it up
 					newInertialInterval = inertialInterval - inertialInterval/5;
 				}
 	
@@ -1248,14 +1258,10 @@ void DoInertialMode(ControlHandle c, ActionProc action, short inertialInterval)
 			{
 				// (it's OK for this to drop negative, will catch negative 
 				// inertialInterval at top of loop)
-				inertialVelocity -= inertialDecel * dtMillis;  
+				inertialVelocity -= inertialDecel * dtMillis;
 
-				// TODO NEW:  if inertialVelocity just dropped to <= 0, FixDiv(1, <=0) gives
-				// a garbage inertialInterval; the doneScrolling check at the top of the
-				// loop catches it next time around, but meanwhile StartTimer below gets
-				// primed with the garbage value (negative --> microseconds!) and can
-				// squeeze in one extra too-fast scroll -- skip recompute when vel <= 0?
-				inertialInterval = (short) FixDiv(1, inertialVelocity);
+				if (inertialVelocity > 0)
+					inertialInterval = (short) FixDiv(1, inertialVelocity);
 			}
 			
 			// check if need to enter/exit turbo mode
@@ -1303,7 +1309,7 @@ void DoInertialMode(ControlHandle c, ActionProc action, short inertialInterval)
 								
 			// call action proc:  apps will sometimes impose
 			// a scroll delay and ignore our actionProc call if too soon!
-			// (we have a special case for this for THINK C only, search for 'KAHL')
+			// (we have a special case for this for THINK C only, search above for 'KAHL')
 			// if this happened, keep looping thru to call actionProc ASAP ...			
 			
 			trace("--- scrolling for real");
@@ -1327,14 +1333,12 @@ void DoInertialMode(ControlHandle c, ActionProc action, short inertialInterval)
 				}
 
 				// rubberband when inertial scroll hits the end
-				//
-				// TODO NEW:  inertialVelocity was already decremented by inertialDecel *
-				// dtMillis above (in the !turboKeyWasDown case), so subtracting it again
-				// here double-counts one deceleration step and the bounce starts slightly
-				// slower than the true current velocity
-				DoRubberBand(c, (inertialVelocity - inertialDecel * dtMillis) 
-								  * ABS(gScrollingDV),
-							 lastScrollMics);
+				DoRubberBand(c, inertialVelocity * ABS(gScrollingDV), lastScrollMics);
+
+				// - note - previously was as below, but that double-decremented given above code:
+				// DoRubberBand(c, (inertialVelocity - inertialDecel * dtMillis) 
+				// 				  * ABS(gScrollingDV),
+				// 			 lastScrollMics);
 
 				doneScrolling = true;
 			}
@@ -1426,6 +1430,10 @@ void UnhiliteControl(ControlHandle c)
 }
 
 void DoRubberBand(ControlHandle c, Fixed vel, unsigned long lastScrollMics)
+// "rubber banding" is when you keep scrolling past the end, and the content goes a little
+// "too" far with decreasing velocity as you keep dragging to some limit -- then bounces back
+// into place when you release
+//
 // if specified, 'vel' is in pixels (not 'scrolls') per millisecond
 //
 // two ways to enter:
@@ -1532,7 +1540,7 @@ void DoRubberBand(ControlHandle c, Fixed vel, unsigned long lastScrollMics)
 				// by 5 pixels before checking (below) if it's nonrectangular, since
 				// we don't need to treat rounded-screen-corner case as a non-
 				// rectangular visRgn requiring a full update (only need to deal with
-				// partially obtruding floating palettes etc in that way that take
+				// partially obtruding floating palettes etc in that they may take
 				// a "notch" out of the side of our window partway up, which rounded
 				// screen corners don't do since they're ... at the corners)
 				
@@ -1576,77 +1584,65 @@ void DoRubberBand(ControlHandle c, Fixed vel, unsigned long lastScrollMics)
 	
 	GetPort(&savePort);
 	SetPort((GrafPtr) frontW);
-	
 
-	// TODO NEW:  this block is dead code (nothing happens either way) -- looks like
-	// a leftover from before the IS_RECT_RGN() check above; delete it
+	if (SetUpOffscreen(&offscreen, &offRect, 0, TRY_TEMP_MEM))
 	{
-		const RgnHandle visRgn = ((GrafPtr) frontW)->visRgn;
-
-		if (GetHandleSize((Handle) visRgn) > 10)
+		if (!LockPixels(GetGWorldPixMap(offscreen.g)))
+			CleanUpOffscreen(&offscreen);  // oops, never mind
+		else
 		{
-			// visRgn not rectangular
-		}
-	}
+			// we are good to go offscreen
+			SavePixels(&offscreen, &offRect);
+			savedPixels = true;
 
-
-	// TODO NEW:  if SetUpOffscreen succeeds but LockPixels fails here, savedPixels
-	// stays false and the 'if (savedPixels)' cleanup below never runs, so the
-	// GWorld leaks permanently.  unlikely (the pixmap is nonpurgeable), but should
-	// call CleanUpOffscreen in that case
-	if (   SetUpOffscreen(&offscreen, &offRect, 0, TRY_TEMP_MEM)
-		&& LockPixels(GetGWorldPixMap(offscreen.g)))
-	{
-		SavePixels(&offscreen, &offRect);
-		savedPixels = true;
-
-		{
-		  	// when we scroll underneath floating palettes, a visual artifact is introduced
-		    // when we "rubberband" and temporarily redraw the floating palette contents in the
-		    // wrong place (to see, put macpaint pattern palette near bottom of screen, e.g.)
-		    //    
-		    // fix is to erase the DiffRgn = (offscreen bitmap rect - 
-		    // front window's visrgn) from the offscreen bitmap after savings pixels 
-		    // offscreen, so we do that here
-		    //
-		    // more generally, this deals with the case where the full scrolling rect is
-		    // not in the visRgn, and the intersection is *not rectangular*:
-	
-			GDHandle saveDevice;
-			CGrafPtr savePort;
-			Rect localOffRect = offRect;
-			const RgnHandle tempRgn = NewRgn();
-			
-			GlobalToLocalRectForPort((GrafPtr) frontW, &localOffRect);
-			RectRgn(tempRgn, &localOffRect);
-			DiffRgn(tempRgn, frontW->visRgn, tempRgn);
-
-			// tempRgn is now the region from the offRect that is NOT in the
-			// window's visRgn -- erase any pixels blitted from there (e.g., part
-			// of a floating pallete obtruding) in the offscren bitmap:
-			
-			if (!EmptyRgn(tempRgn))
 			{
-				Point offset = GET_GLOBAL_COORD_OFFSET(frontW);
-				OffsetRgn(tempRgn, -offset.h, -offset.v);  // now in global coords
-
-				GetGWorld(&savePort, &saveDevice);
-				SetGWorld(offscreen.g, NULL);
-				EraseRgn(tempRgn);
-				SetGWorld(savePort, saveDevice);
+				// when we scroll underneath floating palettes, a visual artifact is introduced
+				// when we "rubberband" and temporarily redraw the floating palette contents in the
+				// wrong place (to see, put macpaint pattern palette near bottom of screen, e.g.)
+				//    
+				// fix is to erase the DiffRgn = (offscreen bitmap rect - 
+				// front window's visrgn) from the offscreen bitmap after savings pixels 
+				// offscreen, so we do that here
+				//
+				// more generally, this deals with the case where the full scrolling rect is
+				// not in the visRgn, and the intersection is *not rectangular*:
+		
+				GDHandle saveDevice;
+				CGrafPtr savePort;
+				Rect localOffRect = offRect;
+				const RgnHandle tempRgn = NewRgn();
 				
-				// when scrolling back from rubberband, we could be revealing pixels
-				// (with ScrollRect) that were "behind" a floating palette -- these
-				// won't get drawn, so remember to InvalRect when we're done (the above
-				// EraseRgn prevents us from instead drawing nonsense -- but we still
-				// do need to have the app draw the RIGHT thing):
-				needFullUpdate = true;
+				GlobalToLocalRectForPort((GrafPtr) frontW, &localOffRect);
+				RectRgn(tempRgn, &localOffRect);
+				DiffRgn(tempRgn, frontW->visRgn, tempRgn);
+
+				// tempRgn is now the region from the offRect that is NOT in the
+				// window's visRgn -- erase any pixels blitted from there (e.g., part
+				// of a floating pallete obtruding) in the offscren bitmap:
+				
+				if (!EmptyRgn(tempRgn))
+				{
+					Point offset = GET_GLOBAL_COORD_OFFSET(frontW);
+					OffsetRgn(tempRgn, -offset.h, -offset.v);  // now in global coords
+
+					GetGWorld(&savePort, &saveDevice);
+					SetGWorld(offscreen.g, NULL);
+					EraseRgn(tempRgn);
+					SetGWorld(savePort, saveDevice);
+					
+					// when scrolling back from rubberband, we could be revealing pixels
+					// (with ScrollRect) that were "behind" a floating palette -- these
+					// won't get drawn, so remember to InvalRect when we're done (the above
+					// EraseRgn prevents us from instead drawing nonsense -- but we still
+					// do need to have the app draw the RIGHT thing):
+					needFullUpdate = true;
+				}
+				
+				DisposeRgn(tempRgn);	
 			}
-			
-			DisposeRgn(tempRgn);	
 		}
 	}
-	
+
 	// initialize scrolling things
 	
 	if (vel)
@@ -1698,7 +1694,6 @@ void DoRubberBand(ControlHandle c, Fixed vel, unsigned long lastScrollMics)
 			}
 			
 			// how far has mouse moved the "wrong way"?
-			// TODO - WHY WAS THIS OLD COMMENT HERE:  "xxxx uses gScrollingDV"		
 			signedMouseDV = gScrollingDV > 0 ? curMouseY - startMouseY 
 											 : startMouseY - curMouseY;
 
@@ -1879,7 +1874,8 @@ void DoRubberBand(ControlHandle c, Fixed vel, unsigned long lastScrollMics)
 	} while (vel > 0 || scrolledDist);
 	// TODO that "while" is infinite-looping if I drop into debugger sometimes
 	// because scrolledDist is nonzero forever.  why???  excessive delay causing us to
-	// scroll too much and overshoot somehow???
+	// scroll too much and overshoot somehow???  either way has never been a problem
+	// in prod ...
 
 	if (savedPixels)
 	{
@@ -1912,6 +1908,8 @@ void DoRubberBand(ControlHandle c, Fixed vel, unsigned long lastScrollMics)
 
 doneRubberBand:
 	RestoreCursor();
+
+	// ... that was kind of a lot
 }
 
 pascal short PatchedTrackControl(ControlHandle c, Point p, ActionProc action)
@@ -2007,8 +2005,7 @@ pascal short PatchedTrackControl(ControlHandle c, Point p, ActionProc action)
 
 		enum { kMaxMouseYs = 3 };  // enum (not const int) so FIFO_BUF_SIZE is a valid array size below
 
-		// stack storage for the queues -- don't want NewPtr calls (which can fail and
-		// return NULL) inside a trap patch
+		// stack storage for the queues to avoid need to call NewPtr
 		char mouseYBuf[FIFO_BUF_SIZE(kMaxMouseYs)];
 		char ticksBuf [FIFO_BUF_SIZE(kMaxMouseYs)];
 
@@ -2033,7 +2030,8 @@ pascal short PatchedTrackControl(ControlHandle c, Point p, ActionProc action)
 				(btnDown = Button()) 
 			 && (r = MouseChecker()) != kScrollNewPartCode)
 		{
-			// TODO do partial scrolling here too
+			// TODO do partial scrolling here too?
+
 			// this is the main drag-scroll loop:
 			// while user drags the mouse such that the synthetic part code is unchanged,
 			// keep calling the action proc
@@ -2076,9 +2074,8 @@ pascal short PatchedTrackControl(ControlHandle c, Point p, ActionProc action)
 					do {
 						DoRubberBand(c, 0, 0);
 
-						// having rubber-banded past the end then come back, 
-						// we now call into
-						// MouseChecker in case user keeps going now in reverse 
+						// having rubber-banded past the end then come back, we now call 
+						// into MouseChecker() in case user keeps going now in reverse 
 						// direction with the mouse down -- in which case MouseChecker
 						// will post a new click.  if user keeps going in SAME 
 						// (bad) direction, we just call DoRubberBand() again.
@@ -2154,10 +2151,10 @@ pascal short PatchedTrackControl(ControlHandle c, Point p, ActionProc action)
 		}
 	
 		// NOTE mouse click here must correspond to part code app saw when it called
-		// TrackControl -- our FindControl patch shoudl be ensuring this -- this is 
+		// TrackControl -- our FindControl patch should be ensuring this -- otherwise would be 
 		// dangerous because action procs for thumb vs page regions/arrows take different
 		// number of arguments!  can lead to bad stack & RTS to unimplemented instruction 
-		// if we screw this up
+		// if we screw this up, so we are careful
 		//	
 		// also note, this one is a tail patch
 
@@ -2218,7 +2215,7 @@ pascal void PatchedSetCursor(CursPtr cursor)
 	
 	if (gWeAreScrolling)
 	{
-		// do nothing -- don''t let TrackControl() etc change to arrow cursor every time
+		// do nothing -- don't let TrackControl() etc change to arrow cursor every time
 		RestoreA4();
 		return;
 	}
@@ -2236,7 +2233,7 @@ short DoScrollRectOrCopyBitsStuff(const Rect * const r, short *dv)
 // ScrollRect, which requires this, or our CopyBits patch, which checks for this)
 {
 	short dvExtra = 0;
-	
+
 	if (gNSBEligible 
 		&& PART_CODE_IS_ARROW_OR_PAGE(gNSBLastFindControlPartCode))
 	{
@@ -2292,6 +2289,8 @@ short DoScrollRectOrCopyBitsStuff(const Rect * const r, short *dv)
 pascal void PatchedCopyBits(BitMap *src, BitMap *dst, 
 	const Rect * srcRect, const Rect * const dstRect,
 	short mode, RgnHandle mask)
+// someone call CopyBits - adjust behavior if we had already partially scrolled so the result
+// isn't over-scrolling visually (among other things)
 {
 	SetUpA4();
 
