@@ -70,19 +70,30 @@ root=$(git rev-parse --show-toplevel)
 . "$root/tools/mac-forks/lib.sh"
 
 tmp=$(mktemp)
-trap 'rm -f "$tmp"' EXIT
+raw=$(mktemp)
+trap 'rm -f "$tmp" "$raw"' EXIT
 # Converted to LF-delimited UTF-8 up front -- both the final output
-# format anyway, AND what the marker-detection below actually needs.
-# Doing this at the end instead (as this used to) meant `head -n 1`/
-# `tail -n "+2"` ran against the *raw* CR-only working-tree bytes, where
-# they don't work at all (they split on LF, and a genuine working-tree
-# mactext file has none) -- `head -n 1` silently returned the *entire*
-# file instead of just its first line, so the "does this already have a
-# marker" check always failed. Confirmed reproducible: with live
-# FinderInfo present (e.g. right after import.sh's restore_finderinfo),
-# that meant a fresh marker got prepended on top of the existing one
-# every time, duplicating it rather than replacing it.
-iconv -f MACINTOSH -t UTF-8 | tr '\r' '\n' >"$tmp"
+# format anyway, AND what the marker-detection below actually needs
+# (`head -n 1`/`tail -n "+2"` split on LF, and a genuine working-tree
+# mactext file has none).
+#
+# Shape-aware, because the working file isn't guaranteed to still be
+# Mac Roman/CR: modern editors have no bare-CR support and guess at
+# encodings, so e.g. VS Code silently rewrites a vintage file as
+# UTF-8 with CRLF endings on save. Feeding that back through the
+# Mac Roman conversion mojibakes every non-ASCII character AND doubles
+# every line (CRLF -> LF LF), and that's what gets committed. So: input
+# that's already valid UTF-8 skips the encoding conversion entirely,
+# and line endings are normalized as breaks (CRLF or lone CR -> one
+# LF), not byte-substituted. A genuine Mac Roman file is never valid
+# UTF-8 (unless pure ASCII, where both branches are identical), so the
+# vintage path is unchanged for real vintage content.
+cat >"$raw"
+if iconv -f UTF-8 -t UTF-8 <"$raw" >/dev/null 2>&1; then
+    perl -0777 -pe 's/\r\n?/\n/g' <"$raw" >"$tmp"
+else
+    iconv -f MACINTOSH -t UTF-8 <"$raw" | perl -0777 -pe 's/\r\n?/\n/g' >"$tmp"
+fi
 
 first_line=$(head -n 1 "$tmp")
 body_start=1
