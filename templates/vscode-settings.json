@@ -1,0 +1,24 @@
+{
+    // Installed by install.sh as a starting point (never overwrites an
+    // existing .vscode/settings.json).
+    //
+    // Vintage source in the working tree is Mac Roman encoded. VS Code
+    // defaults to UTF-8, under which every non-ASCII byte renders as a
+    // U+FFFD replacement character -- and gets SAVED that way, destroying
+    // the original byte. Opening as Mac Roman is always lossless (all 256
+    // byte values map). Scoped per-language rather than workspace-wide so
+    // genuinely-UTF-8 files (READMEs, tools/) stay safe to edit here.
+    //
+    // Line endings need no setting: VS Code saves LF/CRLF only (no bare
+    // CR), and the mac-forks pipeline normalizes any break style back to
+    // real CR at commit and at disk-image build.
+    "[c]":   { "files.encoding": "macroman" },
+    "[cpp]": { "files.encoding": "macroman" },
+
+    // .cp (THINK C's C++ extension) isn't claimed by any built-in VS Code
+    // language -- map it so the encoding override above applies. Add more
+    // here if your project uses other vintage extensions (.p/.pas etc.).
+    "files.associations": {
+        "*.cp": "cpp"
+    }
+}

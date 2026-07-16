@@ -163,6 +163,15 @@ You declare which extensions get the filter in your project's
 *.h filter=mactext -text
 ```
 
+Editing these working-tree files with a modern editor is fine, with one
+condition: the editor must read and write them as Mac Roman. VS Code
+supports that ("Western (Mac Roman)") but defaults to UTF-8, under which
+every non-ASCII byte renders — and saves — as an unrecoverable `�`.
+`install.sh` drops a `.vscode/settings.json` into new projects that sets
+the encoding per-language for C/C++ files. Line endings need no care:
+editors save LF/CRLF (none support bare CR), and the pipeline normalizes
+any break style back to true CR at commit and at disk-image build.
+
 ### `macroman` — the encoding half alone, for `.r` sidecars
 
 DeRez output embeds raw resource-fork bytes in its hex-dump comments, and
@@ -314,8 +323,9 @@ exists — without it, `gh` commands like `gh release create` fail with
 
 `install.sh` checks for required tools, symlinks the hooks, configures
 the `mactext`/`macroman` filters, and creates a starter
-`.gitattributes`/`Makefile` from `tools/mac-forks/templates/` if you
-don't already have them (it never overwrites existing files). **Every
+`.gitattributes`, `Makefile`, and `.vscode/settings.json` from
+`tools/mac-forks/templates/` if you don't already have them (it never
+overwrites existing files). **Every
 clone needs to run it once** — hooks and filter config live in `.git/`,
 which `git clone` never populates.
 
