@@ -103,40 +103,70 @@ whole_flag=0
 # "Mon DD  YYYY" for older ones -- a 4-digit third token means "use this
 # year," an HH:MM token means "assume the current year" (hls's own
 # recent-vs-old heuristic, same as classic ls -l).
+#
+# Recursive, because repo subdirectories map to real HFS folders on the
+# volume (build-floppy.sh's hfsmkdirs) -- a flat root listing would
+# silently skip every file inside one. Emitted names join components
+# with '/', which is exactly what hfsname() produces from a repo path
+# ('/' is plain ASCII and passes through the Mac Roman conversion), so
+# candidate matching stays a byte-for-byte comparison.
 humount 2>/dev/null || true
 hmount "$disk" >/dev/null
 : >"$tmp/newer_files"
 : >"$tmp/new_files"
-hls -l 2>/dev/null | while IFS= read -r line; do
-    case "$line" in
-        f\ *|F\ *) ;;
-        *) continue ;;
-    esac
-    set -- $line
-    mon=$5; day=$6; tyr=$7
-    shift 7
-    name="$*"
-    # Force :00 seconds -- hls only has minute resolution, but `date -j
-    # -f` fills any field missing from the input (seconds, here) from the
-    # *current* wall-clock time rather than zero. Left alone, that makes
-    # the parsed epoch drift later the longer this script takes to run.
-    case "$tyr" in
-        *:*) fmt="%b %d %Y %H:%M:%S"; ts="$mon $day $(date +%Y) $tyr:00" ;;
-        *)   fmt="%b %d %Y %H:%M:%S"; ts="$mon $day $tyr 00:00:00" ;;
-    esac
-    epoch=$(date -j -f "$fmt" "$ts" +%s 2>/dev/null) || continue
-    # Compared against the SAME threshold as the whole-image check above
-    # -- a file's catalog date only matters here if something touched it
-    # after the last build, exactly like the whole-image case. A file
-    # that's simply old (an orphan nothing's cleaned up, say) doesn't
-    # need flagging every single time just because it has no candidate.
-    [ "$epoch" -gt "$threshold" ] || continue
-    if grep -qxF "$name" "$tmp/candidate_hfsnames" 2>/dev/null; then
-        echo "$name" >>"$tmp/newer_files"
+scan() {
+    local hfs_dir=$1 prefix=$2
+    local line dname mon day tyr fmt ts epoch name
+    if [ -z "$hfs_dir" ]; then
+        hls -l 2>/dev/null
     else
-        echo "$name" >>"$tmp/new_files"
-    fi
-done
+        hls -l "$hfs_dir" 2>/dev/null
+    fi | while IFS= read -r line; do
+        case "$line" in
+            d\ *)
+                set -- $line
+                shift 6   # flag, count, "item(s)", mon, day, time/year
+                dname="$*"
+                case "$dname" in
+                    Trash|"Temporary Items"|"Desktop Folder"|Desktop|"Rescued Items"|"Network Trash Folder") continue ;;
+                esac
+                if [ -z "$hfs_dir" ]; then
+                    scan ":$dname" "$prefix$dname/"
+                else
+                    scan "$hfs_dir:$dname" "$prefix$dname/"
+                fi
+                continue
+                ;;
+            f\ *|F\ *) ;;
+            *) continue ;;
+        esac
+        set -- $line
+        mon=$5; day=$6; tyr=$7
+        shift 7
+        name="$prefix$*"
+        # Force :00 seconds -- hls only has minute resolution, but `date -j
+        # -f` fills any field missing from the input (seconds, here) from the
+        # *current* wall-clock time rather than zero. Left alone, that makes
+        # the parsed epoch drift later the longer this script takes to run.
+        case "$tyr" in
+            *:*) fmt="%b %d %Y %H:%M:%S"; ts="$mon $day $(date +%Y) $tyr:00" ;;
+            *)   fmt="%b %d %Y %H:%M:%S"; ts="$mon $day $tyr 00:00:00" ;;
+        esac
+        epoch=$(date -j -f "$fmt" "$ts" +%s 2>/dev/null) || continue
+        # Compared against the SAME threshold as the whole-image check above
+        # -- a file's catalog date only matters here if something touched it
+        # after the last build, exactly like the whole-image case. A file
+        # that's simply old (an orphan nothing's cleaned up, say) doesn't
+        # need flagging every single time just because it has no candidate.
+        [ "$epoch" -gt "$threshold" ] || continue
+        if grep -qxF "$name" "$tmp/candidate_hfsnames" 2>/dev/null; then
+            echo "$name" >>"$tmp/newer_files"
+        else
+            echo "$name" >>"$tmp/new_files"
+        fi
+    done
+}
+scan "" ""
 humount >/dev/null
 
 modified_count=$(wc -l <"$tmp/newer_files" | tr -d ' ')

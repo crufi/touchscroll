@@ -116,7 +116,7 @@ git -c core.quotePath=false ls-files | while IFS= read -r f; do
     if has_ext_ci "$f" hqx || has_ext_ci "$f" r; then
         real=${f%.*}
         tmp=$(mktemp -d)
-        if hcopy -m ":$hfs_prefix$(hfsname "$real")" "$tmp/blob.bin" 2>/dev/null; then
+        if hcopy -m ":$hfs_prefix$(hfspath "$real")" "$tmp/blob.bin" 2>/dev/null; then
             macbinary decode -p -C "$tmp" -o restored <"$tmp/blob.bin"
             mkdir -p "$(dirname "$real")"
             rm -rf "${real:?}"
@@ -140,7 +140,7 @@ done
 git -c core.quotePath=false ls-files | while IFS= read -r f; do
     attr=$(git check-attr filter -- "$f" | awk -F': ' '{print $NF}')
     if [ "$attr" = mactext ]; then
-        if hcopy -r ":$hfs_prefix$(hfsname "$f")" "$f.pulled" 2>/dev/null; then
+        if hcopy -r ":$hfs_prefix$(hfspath "$f")" "$f.pulled" 2>/dev/null; then
             mv "$f.pulled" "$f"
             echo "hcopy -r: $f"
         fi

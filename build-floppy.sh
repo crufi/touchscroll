@@ -21,7 +21,7 @@
 # in install.sh.
 set -eu
 
-for tool in hformat hmount humount hcopy hattrib; do
+for tool in hformat hmount humount hcopy hattrib hmkdir; do
     if ! command -v "$tool" >/dev/null 2>&1; then
         echo "$0: missing $tool -- install hfsutils (brew install hfsutils)" >&2
         exit 1
@@ -74,7 +74,8 @@ git -c core.quotePath=false ls-files | while IFS= read -r f; do
         [ -f "$real" ] || continue
         tmp=$(mktemp -d)
         macbinary encode -p "$real" >"$tmp/blob.bin"
-        hcopy -m "$tmp/blob.bin" ":$(hfsname "$real")"
+        hfsmkdirs "$real"
+        hcopy -m "$tmp/blob.bin" ":$(hfspath "$real")"
         rm -rf "$tmp"
         echo "hcopy -m: $real"
     fi
@@ -92,9 +93,10 @@ done
 git -c core.quotePath=false ls-files | while IFS= read -r f; do
     attr=$(git check-attr filter -- "$f" | awk -F': ' '{print $NF}')
     if [ "$attr" = mactext ]; then
-        hcopy -r "$f" ":$(hfsname "$f")"
-        hattrib -t TEXT ":$(hfsname "$f")"
-        [ -z "$text_creator" ] || hattrib -c "$text_creator" ":$(hfsname "$f")"
+        hfsmkdirs "$f"
+        hcopy -r "$f" ":$(hfspath "$f")"
+        hattrib -t TEXT ":$(hfspath "$f")"
+        [ -z "$text_creator" ] || hattrib -c "$text_creator" ":$(hfspath "$f")"
         echo "hcopy -r: $f"
     fi
 done
