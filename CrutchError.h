@@ -52,7 +52,14 @@ typedef Boolean bool;
 // is an expression but discards the value, so can be used e.g. in straight C code
 // after the declarations section of a block.
 
-#define STATIC_ASSERT(cond) 	  			struct { int _ : !!(cond); }
+#define _STATIC_ASSERT_TYPE(cond) 	  		struct { int _ : !!(cond); }
+
+#ifndef __cplusplus
+#define STATIC_ASSERT(cond) 	  			_STATIC_ASSERT_TYPE(cond) anon
+#else
+#define STATIC_ASSERT(cond) 	  			_STATIC_ASSERT_TYPE(cond)
+#endif
+
 #define STATIC_ASSERT_EXPR(cond)  			sizeof(STATIC_ASSERT(cond))
 #define STATIC_ASSERT_EXPR_DISCARD(cond)  	((void) sizeof(STATIC_ASSERT(cond)))
 

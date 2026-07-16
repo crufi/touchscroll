@@ -247,15 +247,19 @@ short GetVers1(unsigned char *s)
 bool CallShowInitIcon(short code_id, short icon_id) {
 	const Handle showIconCode = Get1Resource('Code', code_id);
 	if (!showIconCode) return false;
+	HLock(showIconCode);
 	((pascal void (*) (short, Boolean)) *(showIconCode)) ((icon_id), true);
+	HUnlock(showIconCode);
 	return true;
 }
 
 bool CallShowInitIconXedOut(short code_id, short icon_id, short x_id) {
 	const Handle showIconCode = Get1Resource('Code', code_id);
 	if (!showIconCode) return false;
+	HLock(showIconCode);
 	((pascal void (*) (short, Boolean)) *(showIconCode)) ((icon_id), false);
     ((pascal void (*) (short, Boolean)) *(showIconCode)) ((x_id), true);
+    HUnlock(showIconCode);
 	return true;
 }
 
