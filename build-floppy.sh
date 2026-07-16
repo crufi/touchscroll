@@ -81,20 +81,26 @@ git -c core.quotePath=false ls-files | while IFS= read -r f; do
     fi
 done
 
-# mactext-filtered text files are already genuine Mac Roman + CR on
-# disk (mactext-smudge already did that conversion) -- hcopy -a/-t's
-# own "text" mode isn't just CR/LF translation, it *also* reinterprets
-# the Unix-side bytes as Latin-1 and re-encodes them into Mac Roman.
-# Run an already-Mac-Roman file through that and every non-ASCII byte
-# gets double-converted (confirmed: a curly quote came out the other
-# side as an accented O). -r (raw) copies the data fork byte-for-byte,
-# which is what we actually want here; it doesn't set type/creator
-# though, so both are stamped explicitly afterward.
+# mactext-filtered text files: normalized to genuine Mac Roman + CR
+# via to_mactext (lib.sh) before copying. Usually the working file is
+# already exactly that (mactext-smudge produced it) and the
+# normalization is a byte-identical pass-through -- but a modern editor
+# may have rewritten it as UTF-8 with LF/CRLF endings in the meantime
+# (VS Code has no bare-CR support and re-encodes on save), and copying
+# that raw puts a file on the volume that the vintage IDE renders full
+# of stray line-ending tofu. Copied with hcopy -r (raw): hcopy's own
+# text mode isn't just CR/LF translation, it *also* reinterprets the
+# Unix-side bytes as Latin-1 and re-encodes them into Mac Roman,
+# double-converting every non-ASCII byte. -r doesn't set type/creator,
+# so both are stamped explicitly afterward.
 git -c core.quotePath=false ls-files | while IFS= read -r f; do
     attr=$(git check-attr filter -- "$f" | awk -F': ' '{print $NF}')
     if [ "$attr" = mactext ]; then
+        tmp=$(mktemp)
+        to_mactext <"$f" >"$tmp"
         hfsmkdirs "$f"
-        hcopy -r "$f" ":$(hfspath "$f")"
+        hcopy -r "$tmp" ":$(hfspath "$f")"
+        rm -f "$tmp"
         hattrib -t TEXT ":$(hfspath "$f")"
         [ -z "$text_creator" ] || hattrib -c "$text_creator" ":$(hfspath "$f")"
         echo "hcopy -r: $f"
