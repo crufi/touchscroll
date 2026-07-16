@@ -102,5 +102,10 @@ if [ ! -f "$root/Makefile" ]; then
     cp "$root/tools/mac-forks/templates/Makefile.example" "$root/Makefile"
     echo "created Makefile from template -- edit SNOW_WORKSPACE/TEXT_CREATOR for your project"
 fi
+if [ ! -f "$root/.vscode/settings.json" ]; then
+    mkdir -p "$root/.vscode"
+    cp "$root/tools/mac-forks/templates/vscode-settings.json" "$root/.vscode/settings.json"
+    echo "created .vscode/settings.json from template -- opens vintage source as Mac Roman in VS Code"
+fi
 
 echo "done."
