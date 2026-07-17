@@ -199,7 +199,9 @@ git diff     # review them like any other local change
 ```
 
 - **`make` / `make all`** — builds `build/<project>.img` (plain HFS) and
-  `build/<project>.hda` (SCSI-style device image for Snow).
+  `build/<project>.hda` (SCSI-style device image for Snow), every folder
+  pre-set to open in list view (see
+  [below](#folders-open-in-list-view-set-folder-viewspy)).
 - **`make run`** — builds, attaches the image to a copy of your Snow
   workspace, launches Snow.
 - **`make pull`** — copies edits back off the *existing* `.hda` into the
@@ -245,6 +247,34 @@ VOLUME_LABEL := Bob's Big Project
 Left unset, the volume is named after the `PROJECT` slug. `SNOW_PATH`,
 `VOLUME_BLOCKS`, and `BUILD_DIR` also have sensible defaults (see
 `snow.mk`/`image.mk`) and can be overridden before the `include` line.
+
+### Folders open in list view (`set-folder-views.py`)
+
+A freshly-minted HFS volume opens every window in icon view, which is
+charming for about five seconds and then you want a list. The Finder
+keeps each folder's view in the folder's *own* catalog record — the
+`frView` field of its `DInfo` (see IM: Toolbox Essentials, Finder
+Interface) — and NOT in the Desktop DB, which despite its reputation
+only caches bundle/icon lookups. So the build just sets it at the
+source: after `build-floppy.sh` finishes, `set-folder-views.py` walks
+the catalog B-tree and pokes `frView` on every directory record, root
+window included, and everything comes up in a tidy "by Name" list.
+
+The default value `0x0200` is not folklore — it's what System 7.5's
+Finder actually wrote when I set a folder to "by Name" in the emulator
+and read the bytes back off the volume. It's a two-byte poke per
+folder, so the B-tree structure itself is never touched, and it runs on
+the plain `.img` before the djjr conversion, so the `.hda` inherits it
+for free. If your Finder speaks a different dialect (or you're an
+"by Kind" person — no judgment), calibrate the same way and pass the
+value yourself:
+
+```sh
+tools/mac-forks/set-folder-views.py build/my-project.img 0200
+```
+
+Plain python3, standard library only — nobody should need pip for a
+two-byte poke.
 
 ### The pieces, individually
 
