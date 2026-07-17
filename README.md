@@ -2,7 +2,8 @@
 
 Shared classic Mac OS utility library for my THINK C / Symantec C++
 projects: error handling and reporting (`CrutchError`), general Toolbox
-helpers (`CrutchUtilities`), and preferences storage (`CrutchSettings`).
+helpers (`CrutchUtilities`), preferences storage (`CrutchSettings`), and
+structured exception handling (`Exceptions`).
 
 The per-project `TinyCrutch*` variants are deliberately **not** here —
 those are hand-minimized per project and diverge on purpose.
