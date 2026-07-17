@@ -55,9 +55,11 @@ typedef Boolean bool;
 #define _STATIC_ASSERT_TYPE(cond) 	  		struct { int _ : !!(cond); }
 
 #ifndef __cplusplus
-// some prior version of THINK C needed below to be a variable definition (i.e. add
-// 'anon' to it), but no longer true (?) so these are identical now:
-#define STATIC_ASSERT(cond) 	  			_STATIC_ASSERT_TYPE(cond)
+// in straight C, can't just define a struct without declaring something; we wrap
+// it in an array so that we can declare the same extern array multiple times (e.g.
+// if STATIC_ASSERT is used multiple times in a macro --> same "__LINE__") without
+// any problems, but prefer the simpler flavor in C++ because it works:
+#define STATIC_ASSERT(cond) 	  			extern char anon[sizeof(_STATIC_ASSERT_TYPE(cond))]
 #else
 #define STATIC_ASSERT(cond) 	  			_STATIC_ASSERT_TYPE(cond)
 #endif
