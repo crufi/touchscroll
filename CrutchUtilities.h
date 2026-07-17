@@ -102,7 +102,7 @@ void InitManagers(ProcPtr resumeProc);  // NULL --> ExitToShell
 
 // LoMem globals for RGB black and white (defined in SysEqu.h) -- I actually can't find
 // these documented in IM anywhere, but are listed in "On Macintosh Programming, 
-// Advanced Techniques" (Daniel Allen, 1990) and I saw referencd in MacTutor articles 
+// Advanced Techniques" (Daniel Allen, 1990) and I saw referenced in MacTutor articles 
 // from ca. 1987 so probably date back to the original Color QuickDraw.
 
 #define RGBBlackPtr ((RGBColor *) 0xC10)

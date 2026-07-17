@@ -449,7 +449,7 @@ Rect GetGlobalWindowPortRect(WindowPtr w)
 }
 
 Rect GetGlobalWindowStrucRect(WindowPtr w)
-// return the rect encluding a window's strucRgn, in global coords --
+// return the rect enclosing a window's strucRgn, in global coords --
 // note this may temporarily show/hide the window offscreen, invoking calls to its WDEF
 {
 	// get global coords of w's topleft corner
