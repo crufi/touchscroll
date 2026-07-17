@@ -52,5 +52,6 @@ TRACKED_STAMP := $(shell sh tools/mac-forks/tracked-stamp.sh $(BUILD_DIR))
 $(HFS_IMAGE): tools/mac-forks/import.sh $(TRACKED_STAMP)
 	sh tools/mac-forks/import.sh
 	sh tools/mac-forks/build-floppy.sh $@ $(strip $(VOLUME_BLOCKS)) "$(strip $(VOLUME_LABEL))" "$(strip $(TEXT_CREATOR))"
+	python3 tools/mac-forks/set-folder-views.py $@
 
 endif

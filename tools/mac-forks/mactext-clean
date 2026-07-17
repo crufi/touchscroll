@@ -89,6 +89,22 @@ trap 'rm -f "$tmp" "$raw"' EXIT
 # UTF-8 (unless pure ASCII, where both branches are identical), so the
 # vintage path is unchanged for real vintage content.
 cat >"$raw"
+
+# Tripwire: U+FFFD (EF BF BD) in the input means an editor opened this
+# Mac Roman file as UTF-8, rendered its non-ASCII bytes as replacement
+# characters, and saved them that way -- the original bytes are already
+# gone from THIS copy, and committing would enshrine the damage. Fail
+# the (required) filter instead, which blocks the add/commit loudly.
+# The lost characters usually still exist in the last committed blob or
+# on a built disk image.
+if LC_ALL=C grep -q "$(printf '\357\277\275')" "$raw"; then
+    echo "mactext-clean: $path contains U+FFFD replacement characters -- a modern editor" >&2
+    echo "  opened this Mac Roman file as UTF-8 and destroyed its non-ASCII bytes on save." >&2
+    echo "  Restore the damaged characters (e.g. compare 'git show :$path') before committing," >&2
+    echo "  and make sure the editor opens vintage files as Mac Roman (see .vscode/settings.json)." >&2
+    exit 1
+fi
+
 if iconv -f UTF-8 -t UTF-8 <"$raw" >/dev/null 2>&1; then
     perl -0777 -pe 's/\r\n?/\n/g' <"$raw" >"$tmp"
 else
