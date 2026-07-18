@@ -268,7 +268,8 @@ down cleanly, and read the bytes back off the volume. And it takes more
 than `frView`: the Finder ignores the whole record until the folder
 looks *touched* — `kIsInited` set in frFlags AND a non-empty saved
 window rect (an empty frRect reads as "this window never existed", and
-the Finder starts fresh, by Icon, every time — ask me how I know). The
+the Finder starts fresh, by Icon, every time — ask me how I know), plus
+the list view's scroll origin for good measure. The
 patch pokes a few bytes inside each record, never the B-tree structure,
 and runs on the plain `.img` before the djjr conversion, so the `.hda`
 inherits it for free. If your Finder speaks a different dialect (or
