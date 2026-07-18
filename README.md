@@ -257,24 +257,30 @@ keeps each folder's view in the folder's *own* catalog record — the
 Interface) — and NOT in the Desktop DB, which despite its reputation
 only caches bundle/icon lookups. So the build just sets it at the
 source: after `build-floppy.sh` finishes, `set-folder-views.py` walks
-the catalog B-tree and pokes `frView` on every directory record, root
-window included, and everything comes up in a tidy "by Name" list.
+the catalog B-tree and stamps every directory record, root window
+included, so everything comes up in a tidy "by Name" list — with each
+subfolder's window opening 40px right and down from its parent's, a
+little staircase instead of a stack.
 
-The default value `0x0200` is not folklore — it's what System 7.5's
-Finder actually wrote when I set a folder to "by Name" in the emulator
-and read the bytes back off the volume. It's a two-byte poke per
-folder, so the B-tree structure itself is never touched, and it runs on
-the plain `.img` before the djjr conversion, so the `.hda` inherits it
-for free. If your Finder speaks a different dialect (or you're an
-"by Kind" person — no judgment), calibrate the same way and pass the
-value yourself:
+None of the values are folklore — they're what System 7.5's Finder
+actually wrote when I set a folder to "by Name" in the emulator, shut
+down cleanly, and read the bytes back off the volume. And it takes more
+than `frView`: the Finder ignores the whole record until the folder
+looks *touched* — `kIsInited` set in frFlags AND a non-empty saved
+window rect (an empty frRect reads as "this window never existed", and
+the Finder starts fresh, by Icon, every time — ask me how I know). The
+patch pokes a few bytes inside each record, never the B-tree structure,
+and runs on the plain `.img` before the djjr conversion, so the `.hda`
+inherits it for free. If your Finder speaks a different dialect (or
+you're a "by Kind" person — no judgment), calibrate the same way and
+pass the value yourself:
 
 ```sh
 tools/mac-forks/set-folder-views.py build/my-project.img 0200
 ```
 
-Plain python3, standard library only — nobody should need pip for a
-two-byte poke.
+Plain python3, standard library only — nobody should need pip to poke
+a few bytes.
 
 ### The pieces, individually
 
