@@ -7,7 +7,8 @@ Usage: set-folder-views.py <image> [frView-hex]
 The classic Finder stores each folder's view mode in the frView field of
 the directory's own catalog record (DInfo) -- not in the Desktop DB. The
 default value 0x0200 is what System 7.5's Finder itself writes when you
-choose "by Name" (calibrated empirically against a real volume: set the
+choose "by Name" (not documented in IM:IV or otherwise that I could find,
+but calibrated empirically against a real volume: set the
 view in the emulator, read the bytes back). Pass a different hex value
 to calibrate for another view or Finder version.
 
@@ -17,8 +18,9 @@ touched. Works on a plain HFS image or an Apple-Partition-Map-wrapped
 device image (.hda) -- in the normal mac-forks build this runs on the
 plain .img before djjr converts it, so the .hda inherits the views.
 
-Stdlib only, on purpose: consumers already need python3 for
-snow-attach-disk.py, and nobody should need pip for a two-byte patch.
+Stdlib only, on purpose (i.e. we don't use machfs, awesome as it is): 
+consumers already need python3 for snow-attach-disk.py, and nobody should 
+need pip for a two-byte patch.
 """
 import struct
 import sys
@@ -84,7 +86,7 @@ def main():
                         continue
                     # dir record: type(1) resrv(1) flags(2) valence(2)
                     # dirID(4) crDat(4) mdDat(4) bkDat(4) then DInfo;
-                    # frView is DInfo+14 -> record+36
+                    # frView is DInfo+14 (see IM:IV) -> record+36
                     view_off = node_off + doff + 36
                     if struct.unpack('>H', data[view_off:view_off + 2])[0] != frview:
                         struct.pack_into('>H', data, view_off, frview)
