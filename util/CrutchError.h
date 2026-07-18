@@ -35,6 +35,8 @@ typedef Boolean bool;
 
 #define anon UNIQID(_anon)
 
+// ========== STATIC_ASSERT and friends
+
 // STATIC_ASSERT allows for compile time assertions.  the standard way to do this is
 // by allocating a negative-size array for cond == 0, but weirdly Sym C++ allows that!
 // so we use a zero-size bitfield (note that '!!' preserves zero while turning any
@@ -64,8 +66,8 @@ typedef Boolean bool;
 #define STATIC_ASSERT(cond) 	  			_STATIC_ASSERT_TYPE(cond)
 #endif
 
-#define STATIC_ASSERT_EXPR(cond)  			sizeof(STATIC_ASSERT(cond))
-#define STATIC_ASSERT_EXPR_DISCARD(cond)  	((void) sizeof(STATIC_ASSERT(cond)))
+#define STATIC_ASSERT_EXPR(cond)  			(sizeof(_STATIC_ASSERT_TYPE(cond)) || true)
+#define STATIC_ASSERT_EXPR_DISCARD(cond)  	((void) STATIC_ASSERT_EXPR(cond))
 
 #define	STATIC_ASSERT_IS_SIZEOF_WRAPPED_POINTER(type) \
 	STATIC_ASSERT(sizeof(type) == sizeof(void *))
@@ -75,7 +77,7 @@ typedef Boolean bool;
 
 #define STATIC_ASSERT_IN_SCOPE(t) 			((void) sizeof(t))
 
-// other handy defines
+// ========== Other handy defines
 
 #define NOP 0x4E71
 
