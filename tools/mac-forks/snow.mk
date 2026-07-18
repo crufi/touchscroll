@@ -41,13 +41,19 @@ DEVICE_IMAGE := $(BUILD_DIR)/$(PROJECT).hda   # the .img, converted to a SCSI-at
 # writing into SNOW_PATH.
 WORKSPACE := $(SNOW_PATH)/$(PROJECT).snoww
 
-.PHONY: all run clean pull guard-hda
+.PHONY: all build run clean pull guard-hda
 
 # Builds both images, not just disk.img -- disk.hda is what Snow (and a
 # release, see release.mk) actually needs, so a plain `make`/`make all`
 # should leave it in a working, current state too, not just the
 # intermediate.
 all: $(DEVICE_IMAGE)
+
+# `make build` is a natural thing to type, and without this alias it
+# targets the existing build/ DIRECTORY -- which has no rule and no
+# prerequisites, so Make reports "Nothing to be done for `build'" and
+# never looks at the image rules at all.
+build: all
 
 # ... and `all` has to be pinned as the default goal explicitly: the
 # image.mk include above defines $(HFS_IMAGE)'s rule first, and Make's
